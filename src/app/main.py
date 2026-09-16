@@ -25,9 +25,18 @@ def main():
     parser.add_argument('--view-actions-test', action='store_true', help='Run report, elevation profile and version parser checks')
     parser.add_argument('--decoration-test', action='store_true', help='Run decoration actions, rendering and project roundtrip checks')
     parser.add_argument('--trim-extend-test', action='store_true', help='Run trim/extend snapping, geometry and undo checks')
+    parser.add_argument('--customization-test', action='store_true', help='Run customization draft, INI, capture and startup checks')
+    parser.add_argument('--mesh-edit-test', action='store_true', help='Run mesh triangulation, edge, face preview and keyboard checks')
+    parser.add_argument('--dwg-import-test', action='store_true', help='Run CAD import, preview, grouping and cancellation checks')
     parser.add_argument('--partial-actions-test', action='store_true', help='Run focused annotation editing and report grouping checks')
     parser.add_argument('--profile', default=str(ROOT / '.runtime/profile'))
+    parser.add_argument('-C', '--nocustomization', action='store_true', help='Skip saved interface customization for this run')
+    parser.add_argument('-z', '--customizationfile', help='Use a QGIS customization INI file')
     args = parser.parse_args()
+    if args.customizationfile:
+        args.customizationfile = str(Path(args.customizationfile).resolve())
+        if not Path(args.customizationfile).is_file(): parser.error('Customization INI file does not exist')
+    if args.customization_test or args.mesh_edit_test or args.dwg_import_test: args.smoke_test = True
     args.smoke_test = args.smoke_test or args.labeling_test or args.annotation_test or args.data_actions_test or args.toolbar_test or args.shape_test or args.remaining_actions_test or args.view_actions_test or args.decoration_test or args.partial_actions_test or args.trim_extend_test
     def stage(name):
         if args.smoke_test:
@@ -72,7 +81,7 @@ def main():
     if translator.load(str(Path(prefix) / 'i18n/qgis_zh-Hans.qm')):
         app.installTranslator(translator)
     from src.app.qgisapp import QgisApp
-    window = QgisApp()
+    window = QgisApp(customization=not args.nocustomization, customizationFile=args.customizationfile)
     originalHook = sys.excepthook
     def exceptionHook(kind, value, tb):
         detail = ''.join(traceback.format_exception(kind, value, tb))
@@ -87,7 +96,13 @@ def main():
         window.addProject(args.project)
     if args.smoke_test:
         def smoke():
-            if args.trim_extend_test:
+            if args.dwg_import_test:
+                from tests.src.python.test_qgisapp_dwgimport import run
+            elif args.mesh_edit_test:
+                from tests.src.python.test_qgisapp_meshediting import run
+            elif args.customization_test:
+                from tests.src.python.test_qgscustomization import run
+            elif args.trim_extend_test:
                 from tests.src.python.test_qgisapp_trimextendfeature import run
             elif args.partial_actions_test:
                 from tests.src.python.test_qgisapp_partialactions import run
@@ -120,11 +135,15 @@ def main():
                 if args.view_actions_test: reportName = 'view-actions-test.json'
                 if args.decoration_test: reportName = 'decoration-test.json'
                 if args.trim_extend_test: reportName = 'trim-extend-test.json'
+                if args.customization_test: reportName = 'customization-test.json'
+                if args.mesh_edit_test: reportName = 'mesh-edit-test.json'
+                if args.dwg_import_test: reportName = 'dwg-import-test.json'
                 if args.partial_actions_test: reportName = 'partial-actions-test.json'
                 (out / reportName).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
                 stage('report-written')
                 window.grab().save(str(out / 'qgis-python.png'))
                 stage('screenshot-written')
+                window.prepareToQuit()
                 app.exit(0)
                 stage('exit-requested')
             except Exception:

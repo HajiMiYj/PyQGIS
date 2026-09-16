@@ -7,6 +7,7 @@ root = Path(__file__).resolve().parents[1]
 # unfinished neighboring action. Shared shape capture, dimensions, topology,
 # ring/part completion and radius-arc continuation passed the shape batch.
 PARTIAL_ACTIONS = {
+    'mActionDwgImport',                   # GDAL CAD backend; libdxfrw fidelity/version coverage remains.
     'mActionEmbedLayers',                 # Individual embedded layers.
     'mesh:mActionDigitizing',             # Face/edge picking and movement; vertex movement exists.
     'mesh:mActionSelectByPolygon',        # Polygon selection of faces.
@@ -23,6 +24,7 @@ PENDING_RUNTIME_ACTIONS = {'mMainAnnotationLayerProperties', 'mActionElevationPr
 
 def implementationState(action):
     if action['status'] == 'excluded-gps': return 'excluded-gps'
+    if action.get('objectName') == 'mActionAddLayerSeparator' and action['status'] == 'connected': return 'ui-placeholder'
     if action.get('objectName') == 'mActionOptions': return 'paused'
     if action['status'] == 'not-ported': return 'not-ported'
     key = action.get('sourceKey') or action['objectName']
@@ -36,6 +38,7 @@ def cell(value): return str(value or '').replace('|', '\\|').replace('\n', ' ')
 
 def label(action):
     return {'excluded-gps': '排除 GPS', 'not-ported': '未实现', 'paused': '暂停',
+            'ui-placeholder': '已接入（隐藏插入锚点）',
             'partial': '部分实现', 'implemented': '已接入',
             'implemented-pending-debug': '已接入，待调试'}[implementationState(action)]
 

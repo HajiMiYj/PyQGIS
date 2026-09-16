@@ -57,7 +57,7 @@ class QgisApp(QMainWindow):
     @staticmethod
     def instance(): return QgisApp._instance
 
-    def __init__(self):
+    def __init__(self, customization=True, customizationFile=None):
         super().__init__()
         QgisApp._instance = self
         self.runtimeErrors = []
@@ -145,6 +145,12 @@ class QgisApp(QMainWindow):
         self.updateRecentProjects()
         self.updateActionState()
         self.updateWindowTitle()
+        from .qgscustomization import QgsCustomization
+        from qgis.PyQt.QtCore import QSettings
+        customizationSettings = QSettings(customizationFile, QSettings.IniFormat) if customizationFile else None
+        enabled = False if not customization else True if customizationFile else None
+        self.mCustomization = QgsCustomization(self, customizationSettings, enabled)
+        self.mCustomization.updateMainWindow()
         self.writeCoverage()
 
     def createCanvas(self):
@@ -630,6 +636,7 @@ class QgisApp(QMainWindow):
         for name, callback in rasterSlots.items(): self.bind('mAction' + name, callback, 'raster')
         self.bind('mActionShowRasterCalculator', self.showRasterCalculator)
         self.bind('mActionDxfExport', self.dxfExport, note='原版 DXF 窗口、图层/字段选择、地图主题、符号模式/比例、编码/CRS、范围、二维和 MText；原生 QgsDxfExport 写文件。复杂 CAD 符号组合仍需验收。')
+        self.bind('mActionDwgImport', self.dwgImport, note='原版 CAD 表单；GDAL 读取、GeoPackage、CRS/XYZ/属性、三种 DXF 块模式、图层选择/预览/分组/合并。ASCII DXF 隐藏/冻结/锁定标志、中文编码、透明色、纸面/地图单位、虚线及端点/连接样式、字体/粗斜体/下划线/删除线/对齐/旋转，以及原版包的多段线宽度与 MTEXT 行距已接入并检查。DWG 版本范围、二进制图层状态、曲线、复杂块/填充/特殊文字仍不完整。')
         self.bind('mActionNewSpatiaLiteLayer', self.newSpatialiteLayer, note='原版建层窗口；数据库连接、字段、主键、几何/Z/M、CRS、空间索引与事务创建；添加至工程。已有数据库只添加，不提供整库覆盖。')
         self.bind('mActionShowMeshCalculator', self.showMeshCalculator, 'mesh', note='原版网格计算 UI；数据集/运算符、时间、范围/多边形掩膜、MDAL 持久或虚拟结果组、进度与取消。部分驱动和复杂时间数据待验收。')
         self.bind('mActionNewMeshLayer', self.newMeshLayer, note='原版窗口与 MDAL createMeshData；空网格、从工程/文件复制网格框架、格式/CRS/名称与加载。不包含网格数字化工具移植。')
@@ -701,6 +708,15 @@ class QgisApp(QMainWindow):
                 'GetInvolved': 'https://qgis.org/community/get-involved/'}
         for name, url in urls.items(): self.bind('mAction' + name, partial(QDesktopServices.openUrl, QUrl(url)))
         self.bind('mActionSponsors', self.sponsors)
+        self.bind('mActionCustomization', lambda: self.mCustomization.openDialog(),
+                  note='原版界面自定义表单；菜单/工具栏/面板/状态栏/浏览器/对话框控件，搜索、全选、INI 导入导出、应用/重置/取消，重启应用配置。')
+        self.bind('actionActionCatchForCustomization', lambda: self.mCustomization.toggleCatch(),
+                  note='Ctrl+M 切换非模态自定义窗口的控件捕获；定位配置树，拦截原操作，临时高亮且不改控件样式。')
+        self.actionActionCatchForCustomization.setShortcutContext(Qt.ApplicationShortcut)
+        self.addAction(self.actionActionCatchForCustomization)
+        self.mActionAddLayerSeparator.setVisible(False)
+        self.mActionAddLayerSeparator.setToolTip('添加图层扩展动作的插入位置')
+        self.mImplementedActions['mActionAddLayerSeparator'] = {'handler': 'insertAddLayerAction/removeAddLayerAction', 'note': '原版隐藏插入锚点，供插件注册添加图层动作；本身不是可执行命令。'}
         self.bind('mActionCheckQgisVersion', self.checkQgisVersion)
         for name in ('Title', 'Copyright', 'Image', 'NorthArrow', 'ScaleBar'):
             note = '原版 UI、应用/取消、画布覆盖层、位置/边距/单位、工程保存恢复、PNG/JPEG/PDF 装饰导出。'
@@ -1111,6 +1127,14 @@ class QgisApp(QMainWindow):
         from .qgsrastercalcdialog import QgsRasterCalcDialog
         layer = self.activeLayer()
         QgsRasterCalcDialog(layer if isinstance(layer, QgsRasterLayer) else None, self).exec_()
+
+    def dwgImport(self):
+        from .dwg.qgsdwgimportdialog import QgsDwgImportDialog
+        dialog = QgsDwgImportDialog(self)
+        try: return dialog.exec_()
+        finally:
+            dialog.clearPreview()
+            dialog.deleteLater()
 
     def dxfExport(self):
         from .qgsdxfexportdialog import QgsDxfExportDialog
@@ -1945,6 +1969,12 @@ class QgisApp(QMainWindow):
         dialog.exec_()
         dialog.deleteLater()
 
+    def insertAddLayerAction(self, action):
+        self.mAddLayerMenu.insertAction(self.mActionAddLayerSeparator, action)
+
+    def removeAddLayerAction(self, action):
+        self.mAddLayerMenu.removeAction(action)
+
     def addEmbeddedItems(self, projectFile, groups, layerIds=()):
         if layerIds:
             self.mMessageBar.pushWarning('嵌入', '当前支持组嵌入；单图层嵌入接口尚未移植，请在源工程中将图层归组。')
@@ -2355,10 +2385,28 @@ class QgisApp(QMainWindow):
                 return
         self.mSettings.setValue('PythonDesktop/geometry', self.saveGeometry())
         self.mSettings.setValue('PythonDesktop/state', self.saveState())
+        self.prepareToQuit()
         event.accept()
+
+    def prepareToQuit(self):
+        # Run after close confirmation, while the event loop and normal layer
+        # removal hooks still exist. Native mesh edit datasets must be released
+        # before their canvas/undo GUI consumers are destroyed in QGIS 3.34.
+        self.mMapCanvas.setMapTool(self.mMapTools['pan'])
+        self.mMapCanvas.stopRendering()
+        for canvas in self.mAdditionalCanvases: canvas.stopRendering()
+        for layer in list(self.mProject.mapLayers().values()):
+            if isinstance(layer, QgsMeshLayer) and layer.isEditable():
+                layer.rollBackFrameEditing(self.mMeshEditTool.transform(layer), False)
+                self.mProject.removeMapLayer(layer.id())
+
     def shutdown(self):
         if self.mShutdown: return
+        self.mUndoWidget.setStack(None)
+        self.mMapCanvas.stopRendering()
+        for canvas in self.mAdditionalCanvases: canvas.stopRendering()
         self.mShutdown = True
+        if hasattr(self, 'mCustomization'): self.mCustomization.shutdown()
         for decoration in self.mDecorationItems:
             if hasattr(decoration, 'shutdown'): decoration.shutdown()
         if hasattr(self, 'mVersionInfo'): self.mVersionInfo.cancel()

@@ -85,6 +85,8 @@ class QgisAppInterface(QgisInterface):
             if action.menu() and action.text() == name: return action.menu()
         return parent.addMenu(name)
     def addPluginToMenu(self, name, action): self._pluginMenu(self.qgis.mPluginMenu, name).addAction(action)
+    def insertAddLayerAction(self, action): self.qgis.insertAddLayerAction(action)
+    def removeAddLayerAction(self, action): self.qgis.removeAddLayerAction(action)
     def removePluginMenu(self, name, action): self._pluginMenu(self.qgis.mPluginMenu, name).removeAction(action)
     def registerMainWindowAction(self, action, shortcut):
         action.setShortcut(QKeySequence(shortcut))

@@ -12,6 +12,8 @@
 
 默认使用 `C:\OSGeo4W\apps\qgis-ltr`，要求实际版本为 3.34.10。OSGeo4W 在其他位置时，先设置 `$env:OSGEO4W_ROOT`。不要用普通系统 Python 启动。可将工程文件路径作为启动参数。
 
+如果界面自定义隐藏了需要的入口，可用 `.\run-qgis-python.cmd --nocustomization`（或 `-C`）跳过本次自定义，然后进入自定义窗口调整配置。此参数不会删除配置。指定外部配置使用 `.\run-qgis-python.cmd --customizationfile "C:\path\customization.ini"`（或 `-z`）；与 `-C` 同时使用时，本次跳过自定义。
+
 ## 哪些文件需要编译
 
 | 输入 | 工具和输出 | 何时执行 |
@@ -28,6 +30,7 @@
 | `src/ui/qgsdxfexportdialogbase.ui`、`src/ui/qgsnewspatialitelayerdialogbase.ui` | 运行时 `uic.loadUi` | DXF 与 SpatiaLite 原版窗口；连接控件使用 Python 构造适配；无需预编译 |
 | `src/ui/mesh/qgsmeshcalculatordialogbase.ui`、`qgsnewmeshlayerdialogbase.ui` | 运行时 `uic.loadUi` | 网格计算与新建网格原版窗口；无需预编译 |
 | `src/ui/qgsdecorationgriddialog.ui`、`qgsdecorationlayoutextentdialog.ui` | 运行时 `uic.loadUi` | 网格和布局范围装饰的原版表单；无需预编译 |
+| `src/ui/qgscustomizationdialogbase.ui`、`resources/customization.xml` | 原版表单运行时加载，XML 直接读取 | 界面自定义窗口与控件目录；文件已放入项目，无需 pyuic/pyrcc |
 | `src/ui/qgsoptionsbase.ui`、`qgsrenderingoptionsbase.ui` | 运行时加载的选项草稿 | 选项移植按用户要求暂停，未纳入本轮验收，无需编译 |
 
 脚本已经选用 OSGeo4W 自带的 PyQt5，不需要另外安装 Qt/PyQt：
@@ -49,6 +52,12 @@
 - 图标不仅来自 `.ui`。`QgisApp.setTheme()` 还落实 C++ 的动态图标赋值，资源包内保留其映射作为后备。
 
 ## 这轮功能的使用
+
+“设置 → 界面自定义”支持菜单、工具栏及组合按钮的子动作、面板、状态栏、浏览器来源和对话框控件。启用后可搜索对象名称/显示名称，展开、折叠、全选，导入或导出原版路径格式的 INI。应用/确定保存配置，**重启后生效**；重置恢复上次应用的配置，取消丢弃尚未应用的修改。Options 仍按要求暂停。
+
+自定义窗口保持打开时，点击“捕获”或按 `Ctrl+M`，再点击主窗口工具按钮、菜单项或对话框控件，可定位到树并切换其勾选状态。捕获期间点击不会执行原操作，临时高亮不会改写控件样式；关闭窗口退出捕获。浏览器自定义始终保留 GPS 排除。
+
+插件可以通过 `iface.insertAddLayerAction(action)`、`iface.removeAddLayerAction(action)` 注册或移除“添加图层”菜单动作。原版 `mActionAddLayerSeparator` 是隐藏插入锚点，本身没有点击操作，清单已单独注明。
 
 “视图 → 装饰”已接入网格和布局范围。网格支持线/标记、X/Y 间隔和偏移、从画布范围或当前栅格像元获取间隔、坐标标注方向及文本格式；画布坐标单位改变时会关闭旧网格，请重新设置间隔。布局范围显示当前打开的布局设计器中的地图范围与名称，支持旋转、坐标转换、符号和文本设置，关闭设计器后相应范围消失。两项均保存到工程，并参加地图 PNG/PDF 导出。
 
@@ -112,9 +121,19 @@
 
 网孔顶点移动：数字化状态先选顶点（Shift 加选），再点击已选顶点开始移动，再左键确认；右键/Esc 取消。绿色顶点预览表示原生拓扑校验通过，红色表示不可提交；移动保持 Z 不变，确认后可撤销。预览期间不修改编辑网孔，图层切换、工具切换或其他编辑会取消正在进行的移动。
 
+网孔数字化新增：选中至少三个合适顶点后，右键执行 Delaunay 三角化；选中公共边两端点后，右键可翻转边或合并两侧面，按原生拓扑条件启用。Ctrl 点击已有顶点构建新面时显示有效/无效预览；Backspace 回退、Esc 取消。Z 输入框显示选中顶点的平均值，输入后 Enter 批量修改并支持撤销。Ctrl+Delete 删除顶点并填洞，Ctrl+Shift+Delete 删除顶点及相邻面，Shift+Delete 删除所选面。直接悬停拾取边/面等未完成分支仍保留部分实现状态。
+
+DWG/DXF 导入：使用原版窗口，选择源图纸、CRS 和新的 `.gpkg` 文件名后导入；可预览、选择 CAD 图层、设置可见性，再分组或合并加载。已有包可用“加载图层”重新打开，导入不覆盖已有文件。DXF 支持展开块、展开并保留插入点、仅保留块插入点三种模式；保留读取到的 XYZ、原始属性与 OGR 样式。ASCII DXF 保留图层关闭/冻结/锁定标志，关闭/冻结默认不显示，可重新勾选显示；锁定标志保存在包中，不限制导入后的 QGIS 编辑。文字支持字体、粗斜体、下划线、删除线、对齐和旋转；线条保留虚线、端点/连接样式及纸面/地图单位。加载原版 CAD 包时适配多段线宽度、TEXT/MTEXT 对齐与行距。样式参数按 [GDAL Feature Style](https://gdal.org/en/stable/user/ogr_feature_style.html) 映射到原生 QGIS 符号与标注。曲线、复杂块/填充/特殊文字及二进制图层状态仍未完整移植；本机 CAD 驱动仅支持 DWG R2000，其他版本可手动转换为 DXF 后导入，该 Action 保留部分实现。
+
+网孔坐标变换：勾选坐标轴、输入表达式后先点预览，结果有效才能应用；表达式、选区或网孔数据变化会清除旧预览并禁用应用。“导入坐标”是持续开关，开启后随单个选中顶点更新表达式；多选时清空，关闭时也清空。坐标小数位数沿用工程设置。完整的面/边变换预览仍未完成。
+
 清单涵盖主窗口 `.ui` 和已普查的 C++ 动态动作，启动应用或打开清单时自动更新。状态按各 Action 的具体缺项核定，不再根据备注中的“部分”等词猜测。用 OSGeo4W Python 运行 `scripts/sync_toolbar_actions.py` 可从原版源码更新动态来源表；`scripts/update_porting_status.py` 可手动刷新同一份清单。动态来源扫描还不是所有 QGIS 模块的完整普查。
 
 ## 检查
+
+网孔编辑新增功能：`.\run-qgis-python.cmd --mesh-edit-test`，报告为 `output/mesh-edit-test.json`；覆盖三角化、翻转/合并公共边、新面预览、Z 修改、原版删除快捷键、撤销、退出清理，以及坐标变换的预览/应用状态与坐标导入开关。CAD 导入：`.\run-qgis-python.cmd --dwg-import-test`，报告为 `output/dwg-import-test.json`；覆盖原版 Action、真实 DXF/GeoPackage、XYZ/CRS/属性、筛选/预览/分组/合并、工程恢复、三种块模式、取消和目标文件保护；还检查图层状态/中文名、样式字段与原版 CAD 包的多段线和标注配置。两项本机检查通过；新增原版 CAD 表单运行时加载，无需 pyuic/pyrcc。
+
+界面自定义集中检查：`.\run-qgis-python.cmd --customization-test`，报告为 `output/customization-test.json`。使用隔离 INI 检查原版窗口、六类配置树、搜索、应用/重置/取消、导入导出、真实点击捕获和 Ctrl+M、组合按钮默认动作切换、下一次启动配置应用及显式跳过、动态对话框控件和插件菜单插入/移除；本机检查通过，未修改用户自定义配置。
 
 网格/布局范围装饰使用 `.\run-qgis-python.cmd --decoration-test`，修剪/延伸使用 `.\run-qgis-python.cmd --trim-extend-test`。两项集中检查已在本机 OSGeo4W QGIS 3.34.10 通过，报告为 `output/decoration-test.json`、`output/trim-extend-test.json`：覆盖原版 Action 点击、实际装饰绘制/工程恢复/导出，以及原生线段捕捉、两侧修剪/延伸、Z/M、多部件、面、跨 CRS、拓扑节点、撤销和取消。
 
