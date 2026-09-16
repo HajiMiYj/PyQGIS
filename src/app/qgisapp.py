@@ -796,6 +796,10 @@ class QgisApp(QMainWindow):
         self.toggleMapTips(self.mActionMapTips.isChecked())
         self.bind('mActionStatisticalSummary', lambda: self.mStatisticalSummaryDockWidget.setVisible(self.mActionStatisticalSummary.isChecked()), signal='toggled')
         self.mStatisticalSummaryDockWidget.visibilityChanged.connect(self.mActionStatisticalSummary.setChecked)
+        from .georeferencer.qgsgeorefmainwindow import QgsGeoreferencerMainWindow
+        self.mGeoreferencer = QgsGeoreferencerMainWindow(self)
+        self.bind('mActionShowGeoreferencer', self.showGeoreferencer,
+                  note='原版地理配准窗口及 24 个 Action；栅格/矢量源、控制点表/文件/拾取/移动、原生变换、输出、直方图与画布联动。栅格投影变换、PDF、停靠和矢量 GDAL 脚本仍未完成。')
         for name in self.mImplementedActions:
             action = getattr(self, name)
             action.setToolTip(self.mImplementedActions[name].get('note') or action.text())
@@ -2242,9 +2246,9 @@ class QgisApp(QMainWindow):
             if implementation:
                 action = implementation['action']
                 item.update(objectName=action.objectName(), handler=implementation['handler'], note=implementation['note'])
-                item['inToolbar'] = action in getattr(self, item['toolbar']).actions()
-                if not item['inToolbar']:
-                    toolbar = getattr(self, item['toolbar'])
+                toolbar = implementation.get('toolbarWidget', getattr(self, item['toolbar'], None))
+                item['inToolbar'] = toolbar is not None and action in toolbar.actions()
+                if not item['inToolbar'] and toolbar is not None:
                     item['inToolbar'] = any(
                         button.menu() and action in button.menu().actions()
                         for toolbarAction in toolbar.actions()
@@ -2375,6 +2379,11 @@ class QgisApp(QMainWindow):
             # Windows may have no default application associated with .md.
             from qgis.PyQt.QtCore import QProcess
             QProcess.startDetached('notepad.exe', [str(path)])
+    def showGeoreferencer(self):
+        self.mGeoreferencer.show()
+        self.mGeoreferencer.raise_()
+        self.mGeoreferencer.activateWindow()
+        return self.mGeoreferencer
     def closeEvent(self, event):
         if not self.saveDirty():
             event.ignore()
@@ -2383,6 +2392,9 @@ class QgisApp(QMainWindow):
             if not blocker.allowExit():
                 event.ignore()
                 return
+        if not self.mGeoreferencer.canClose():
+            event.ignore()
+            return
         self.mSettings.setValue('PythonDesktop/geometry', self.saveGeometry())
         self.mSettings.setValue('PythonDesktop/state', self.saveState())
         self.prepareToQuit()
@@ -2406,6 +2418,7 @@ class QgisApp(QMainWindow):
         self.mMapCanvas.stopRendering()
         for canvas in self.mAdditionalCanvases: canvas.stopRendering()
         self.mShutdown = True
+        self.mGeoreferencer.shutdown()
         if hasattr(self, 'mCustomization'): self.mCustomization.shutdown()
         for decoration in self.mDecorationItems:
             if hasattr(decoration, 'shutdown'): decoration.shutdown()

@@ -179,4 +179,6 @@ DXF、SpatiaLite 与网格专项检查：`.\run-qgis-python.cmd --data-actions-t
 
 在此 OSGeo4W 环境中已完成运行检查；服务器连接、第三方插件及各类真实数据格式仍需用你的实际数据验收。Processing 提供者能否执行取决于其依赖是否安装和配置，例如 GRASS。可手动完成这类环境配置。
 
+地理配准现已接入原版窗口的 24 个 Action：打开栅格/矢量、控制点增删移动/坐标拾取/保存加载、缩放历史与双向画布联动、图层属性、直方图拉伸、变换设置及实际输出。栅格支持线性、Helmert、一至三阶多项式、TPS、世界文件及独立 GDAL Python 脚本；矢量使用原生变换器输出 GeoPackage。运行 `.\run-qgis-python.cmd --georeferencer-test` 可集中检查，报告为 `output/georeferencer-test.json`。栅格投影变换、PDF 地图/报告、配准窗口停靠、矢量脚本仍未完成，相关 Action 保持“部分实现”。原版 UI 已放入项目，运行时加载，重启即可，无需手动 pyuic/pyrcc。
+
 QGIS 原版及本项目的相关移植代码遵循根目录 `COPYING`；资源保留原有许可说明。

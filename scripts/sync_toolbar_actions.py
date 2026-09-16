@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = Path(os.environ.get('QGIS_SOURCE_ROOT', r'C:\QGIS_COMPILE\QGIS-final-3_34_10'))
@@ -55,6 +56,18 @@ def main():
                             source=path.relative_to(SOURCE).as_posix(), group='Annotation', icon=icon, objectName=None,
                             location='toolbar', note='原版注册表创建；实际 QObject 名由翻译后的 visibleName 动态生成。'))
     assert len([a for a in actions if a['toolbar'] == 'mAnnotationsToolBar']) == 5
+    path = SOURCE / 'src/ui/georeferencer/qgsgeorefpluginguibase.ui'
+    form = ET.parse(path)
+    cpp = (SOURCE / 'src/app/georeferencer/qgsgeorefmainwindow.cpp').read_text(encoding='utf-8')
+    icons = dict(re.findall(r'(mAction\w+)->setIcon\( QgsApplication::getThemeIcon\( QStringLiteral\( "([^"]+)"', cpp))
+    for action in form.findall('.//action'):
+        name = action.get('name')
+        toolbar = next((widget.get('name') for widget in form.findall('.//widget')
+                        if widget.get('class') == 'QToolBar' and any(a.get('name') == name for a in widget.findall('addaction'))), '')
+        actions.append(dict(sourceKey='georeferencer:' + name, toolbar='georeferencer.' + toolbar if toolbar else '',
+                            text=action.findtext("property[@name='text']/string", name), objectName=name,
+                            source=path.relative_to(SOURCE).as_posix(), group='Georeferencer', icon=icons.get(name, ''),
+                            location='toolbar' if toolbar else 'menu', note='原版地理配准窗口 Action。'))
     payload = {'version': '3.34.10', 'actions': actions, 'extensionPoints': [
         {'toolbar': 'mWebToolBar', 'source': 'src/app/qgisapp.cpp', 'note': '原版为空的插件扩展工具栏；由插件调用 addWebToolBarIcon/addWebToolBarWidget 填入，没有固定内置 Action 清单。'}]}
     (ROOT / 'docs/upstream-toolbar-actions.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')

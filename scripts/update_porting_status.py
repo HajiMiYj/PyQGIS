@@ -7,6 +7,11 @@ root = Path(__file__).resolve().parents[1]
 # unfinished neighboring action. Shared shape capture, dimensions, topology,
 # ring/part completion and radius-arc continuation passed the shape batch.
 PARTIAL_ACTIONS = {
+    'mActionShowGeoreferencer',            # Raster projective, PDF output, docking and vector GDAL script remain.
+    'georeferencer:mActionStartGeoref',
+    'georeferencer:mActionTransformSettings',
+    'georeferencer:mActionGDALScript',
+    'georeferencer:mActionGeorefConfig',
     'mActionDwgImport',                   # GDAL CAD backend; libdxfrw fidelity/version coverage remains.
     'mActionEmbedLayers',                 # Individual embedded layers.
     'mesh:mActionDigitizing',             # Face/edge picking and movement; vertex movement exists.
