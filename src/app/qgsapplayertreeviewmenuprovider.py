@@ -1,6 +1,7 @@
 """Application layer-tree context menu; upstream class/file names retained."""
-from qgis.PyQt.QtWidgets import QMenu, QInputDialog
-from qgis.core import QgsLayerTreeLayer, QgsLayerTreeGroup, QgsMapLayerType
+from qgis.PyQt.QtWidgets import QMenu, QInputDialog, QAction
+from qgis.core import (QgsLayerTreeLayer, QgsLayerTreeGroup, QgsMapLayerType,
+                       QgsVectorLayer, QgsVectorTileLayer, QgsAbstractVectorLayerLabeling, QgsVectorLayerSimpleLabeling)
 from qgis.gui import QgsLayerTreeViewMenuProvider
 
 
@@ -8,6 +9,44 @@ class QgsAppLayerTreeViewMenuProvider(QgsLayerTreeViewMenuProvider):
     def __init__(self, view, canvas, app):
         super().__init__()
         self.mView, self.mCanvas, self.mApp = view, canvas, app
+        self.mContextActions = {}
+        defaults = view.defaultActions()
+        for name, label in [('actionZoomToGroup', '缩放至组'), ('actionMoveOutOfGroup', '移出组'),
+                            ('actionMoveToTop', '移到顶部'), ('actionMoveToBottom', '移到底部'),
+                            ('actionCheckAndAllChildren', '选中组及所有子项'),
+                            ('actionUncheckAndAllChildren', '取消选中组及所有子项'),
+                            ('actionCheckAndAllParents', '选中图层及所有父组')]:
+            action = QAction(label, app)
+            action.setObjectName(name)
+            def invoke(checked=False, factory=name):
+                native = (defaults.actionZoomToGroup(canvas, app) if factory == 'actionZoomToGroup'
+                          else getattr(defaults, factory)(app))
+                if native:
+                    native.trigger()
+                    native.deleteLater()
+            action.triggered.connect(invoke)
+            self.mContextActions[name] = action
+            app.mDynamicActions['layertree:'+name] = dict(action=action, handler=name,
+                note='图层树右键菜单调用原生默认动作；使用当前选择与节点。', inInterface=True)
+        self.actionShowLabels = QAction('显示标注', app)
+        self.actionShowLabels.setObjectName('actionShowLabels')
+        self.actionShowLabels.setCheckable(True)
+        self.actionShowLabels.toggled.connect(self.toggleLabels)
+        app.mDynamicActions['layertree:actionShowLabels'] = dict(action=self.actionShowLabels, handler='toggleLabels',
+            note='所选矢量/矢量瓦片标注显隐；无配置时使用原生默认标注设置。', inInterface=True)
+
+    def toggleLabels(self, enabled):
+        for node in self.mView.selectedLayerNodes():
+            layer = node.layer()
+            if isinstance(layer, QgsVectorLayer):
+                if not layer.isSpatial(): continue
+                if enabled and not layer.labeling():
+                    layer.setLabeling(QgsVectorLayerSimpleLabeling(QgsAbstractVectorLayerLabeling.defaultSettingsForLayer(layer)))
+            elif not isinstance(layer, QgsVectorTileLayer): continue
+            layer.setLabelsEnabled(enabled)
+            layer.emitStyleChanged()
+            layer.triggerRepaint()
+        self.mApp.mProject.setDirty(True)
 
     def createContextMenu(self):
         menu = QMenu(self.mView)
@@ -22,12 +61,25 @@ class QgsAppLayerTreeViewMenuProvider(QgsLayerTreeViewMenuProvider):
         menu.addAction(defaults.actionRenameGroupOrLayer(menu))
         menu.addAction('移除图层/组', self.mApp.removeLayer)
         if isinstance(node, QgsLayerTreeGroup):
+            for name in ('actionZoomToGroup', 'actionCheckAndAllChildren', 'actionUncheckAndAllChildren',
+                         'actionMoveToTop', 'actionMoveToBottom'):
+                menu.addAction(self.mContextActions[name])
             menu.addAction(defaults.actionMutuallyExclusiveGroup(menu))
             menu.addAction(defaults.actionGroupSelected(menu))
+            menu.addAction('保存为图层定义文件…', self.mApp.saveAsLayerDefinition)
         if not isinstance(node, QgsLayerTreeLayer):
             return menu
         layer = node.layer()
         self.mApp.setActiveLayer(layer)
+        if isinstance(layer, (QgsVectorLayer, QgsVectorTileLayer)):
+            blocked = self.actionShowLabels.blockSignals(True)
+            self.actionShowLabels.setChecked(layer.labelsEnabled())
+            self.actionShowLabels.blockSignals(blocked)
+            menu.addAction(self.actionShowLabels)
+        for name in ('actionMoveToTop', 'actionMoveToBottom', 'actionCheckAndAllParents'):
+            menu.addAction(self.mContextActions[name])
+        if node.parent() is not self.mApp.mProject.layerTreeRoot():
+            menu.addAction(self.mContextActions['actionMoveOutOfGroup'])
         menu.addSeparator()
         for name in ['mActionZoomToLayer', 'mActionZoomToSelected', 'mActionDuplicateLayer',
                      'mActionSetLayerScaleVisibility', 'mActionSetLayerCRS', 'mActionSetProjectCRSFromLayer']:

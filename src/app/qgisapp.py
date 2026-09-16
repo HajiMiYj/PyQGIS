@@ -201,32 +201,50 @@ class QgisApp(QMainWindow):
         from .qgsstatusbarcoordinateswidget import QgsStatusBarCoordinatesWidget
         from .qgsstatusbarmagnifierwidget import QgsStatusBarMagnifierWidget
         from .qgsstatusbarscalewidget import QgsStatusBarScaleWidget
-        from qgis.gui import QgsDoubleSpinBox
+        from qgis.gui import QgsDoubleSpinBox, QgsStatusBar
+        from qgis.PyQt.QtWidgets import QShortcut
+        from qgis.PyQt.QtCore import QElapsedTimer
         from src.gui.qgstaskmanagerwidget import QgsTaskManagerStatusBarWidget
         self.statusbar.setStyleSheet('QStatusBar::item {border: none;}')
         statusFont = self.font()
         statusFont.setPointSize(max(8, statusFont.pointSize() - 1))
         self.statusbar.setFont(statusFont)
-        self.mLocatorWidget = QgsLocatorWidget(self)
-        self.mLocatorWidget.setMaximumWidth(190)
-        self.statusbar.addWidget(self.mLocatorWidget)
+        self.mStatusBar = QgsStatusBar(self.statusbar)
+        self.mStatusBar.setObjectName('mStatusBar')
+        self.mStatusBar.setParentStatusBar(self.statusbar)
+        self.mStatusBar.setFont(statusFont)
+        self.statusbar.addPermanentWidget(self.mStatusBar, 10)
+        self.mLocatorWidget = QgsLocatorWidget(self.mStatusBar)
+        self.mStatusBar.addPermanentWidget(self.mLocatorWidget, 0, QgsStatusBar.AnchorLeft)
+        self.mLocatorShortcut = QShortcut(QKeySequence('Ctrl+K'), self)
+        self.mLocatorShortcut.setObjectName('Locator')
+        self.mLocatorShortcut.activated.connect(lambda: self.mLocatorWidget.search(''))
         self.mProgressBar = QProgressBar()
-        self.mProgressBar.setMaximumWidth(60)
+        self.mProgressBar.setObjectName('mProgressBar')
+        self.mProgressBar.setMaximumWidth(100)
+        self.mProgressBar.setMaximumHeight(18)
         self.mProgressBar.setRange(0, 0)
         self.mProgressBar.hide()
-        self.statusbar.addPermanentWidget(self.mProgressBar)
-        self.mMapCanvas.renderStarting.connect(self.mProgressBar.show)
-        self.mMapCanvas.mapCanvasRefreshed.connect(self.mProgressBar.hide)
-        self.mTaskManagerWidget = QgsTaskManagerStatusBarWidget(QgsApplication.taskManager(), self.statusbar)
-        self.statusbar.addPermanentWidget(self.mTaskManagerWidget)
-        self.mCoordsEdit = QgsStatusBarCoordinatesWidget(self.mMapCanvas, self)
-        self.statusbar.addPermanentWidget(self.mCoordsEdit)
-        self.mScaleWidget = QgsStatusBarScaleWidget(self.mMapCanvas, self.statusbar)
+        self.mStatusBar.addPermanentWidget(self.mProgressBar, 1)
+        self.mLastRenderTime = QElapsedTimer()
+        self.mLastRenderTimeSeconds = 0
+        self.mRenderProgressBarTimer = QTimer(self)
+        self.mRenderProgressBarTimer.setSingleShot(True)
+        self.mRenderProgressBarTimer.timeout.connect(lambda: self.showProgress(-1, 0))
+        self.mMapCanvas.renderStarting.connect(self.canvasRefreshStarted)
+        self.mMapCanvas.mapCanvasRefreshed.connect(self.canvasRefreshFinished)
+        self.mTaskManagerWidget = QgsTaskManagerStatusBarWidget(QgsApplication.taskManager(), self.mStatusBar)
+        self.mStatusBar.addPermanentWidget(self.mTaskManagerWidget)
+        self.mCoordsEdit = QgsStatusBarCoordinatesWidget(self.mMapCanvas, self.mStatusBar)
+        self.mCoordsEdit.setObjectName('mCoordsEdit')
+        self.mStatusBar.addPermanentWidget(self.mCoordsEdit)
+        self.mScaleWidget = QgsStatusBarScaleWidget(self.mMapCanvas, self.mStatusBar)
         self.mScaleWidget.setObjectName('mScaleWidget')
         self.mScaleEdit = self.mScaleWidget.mScale
-        self.statusbar.addPermanentWidget(self.mScaleWidget)
-        self.mMagnifierWidget = QgsStatusBarMagnifierWidget(self.mMapCanvas, self)
-        self.statusbar.addPermanentWidget(self.mMagnifierWidget)
+        self.mStatusBar.addPermanentWidget(self.mScaleWidget)
+        self.mMagnifierWidget = QgsStatusBarMagnifierWidget(self.mMapCanvas, self.mStatusBar)
+        self.mMagnifierWidget.setObjectName('mMagnifierWidget')
+        self.mStatusBar.addPermanentWidget(self.mMagnifierWidget)
         self.mRotationEdit = QgsDoubleSpinBox()
         self.mRotationEdit.setObjectName('mRotationEdit')
         self.mRotationEdit.setClearValue(0)
@@ -236,30 +254,75 @@ class QgisApp(QMainWindow):
         self.mRotationEdit.setDecimals(1)
         self.mRotationEdit.setSuffix(' °')
         self.mRotationEdit.setKeyboardTracking(False)
-        self.mRotationEdit.setMaximumWidth(90)
+        self.mRotationEdit.setMaximumWidth(120)
+        self.mRotationEdit.setToolTip('当前地图顺时针旋转角度')
         self.mRotationEdit.valueChanged.connect(self.mMapCanvas.setRotation)
-        self.mMapCanvas.rotationChanged.connect(self.mRotationEdit.setValue)
-        self.statusbar.addPermanentWidget(QLabel('旋转'))
-        self.statusbar.addPermanentWidget(self.mRotationEdit)
+        self.mMapCanvas.rotationChanged.connect(self.showRotation)
+        self.mRotationEdit.setValue(self.mMapCanvas.rotation())
+        self.mRotationLabel = QLabel('旋转', self.mStatusBar)
+        self.mRotationLabel.setObjectName('mRotationLabel')
+        self.mRotationLabel.setMinimumWidth(10)
+        self.mRotationLabel.setMargin(3)
+        self.mRotationLabel.setAlignment(Qt.AlignCenter)
+        self.mRotationLabel.setToolTip(self.mRotationEdit.toolTip())
+        self.mStatusBar.addPermanentWidget(self.mRotationLabel)
+        self.mStatusBar.addPermanentWidget(self.mRotationEdit)
         self.mRenderSuppressionCBox = QCheckBox('渲染')
-        self.mRenderSuppressionCBox.setChecked(True)
+        self.mRenderSuppressionCBox.setObjectName('mRenderSuppressionCBox')
+        self.mRenderSuppressionCBox.setToolTip('开启或暂停地图渲染')
+        self.mRenderSuppressionCBox.setChecked(self.mMapCanvas.renderFlag())
         self.mRenderSuppressionCBox.toggled.connect(self.mMapCanvas.setRenderFlag)
-        self.statusbar.addPermanentWidget(self.mRenderSuppressionCBox)
+        self.mRenderSuppressionCBox.toggled.connect(lambda enabled: None if enabled else self.canvasRefreshFinished())
+        self.mStatusBar.addPermanentWidget(self.mRenderSuppressionCBox)
         self.mOnTheFlyProjectionStatusButton = QToolButton()
         self.mOnTheFlyProjectionStatusButton.setObjectName('mOntheFlyProjectionStatusButton')
         self.mOnTheFlyProjectionStatusButton.setAutoRaise(True)
         self.mOnTheFlyProjectionStatusButton.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.mOnTheFlyProjectionStatusButton.setIcon(QgsApplication.getThemeIcon('/mIconProjectionEnabled.svg'))
-        self.mOnTheFlyProjectionStatusButton.setText('EPSG:4326')
         self.mOnTheFlyProjectionStatusButton.clicked.connect(lambda: self.projectProperties('mProjOptsCRS'))
-        self.statusbar.addPermanentWidget(self.mOnTheFlyProjectionStatusButton)
+        self.mStatusBar.addPermanentWidget(self.mOnTheFlyProjectionStatusButton)
+        self.mProject.crsChanged.connect(self.updateCrsStatusBar)
+        self.updateCrsStatusBar()
         self.mMessageButton = QToolButton()
         self.mMessageButton.setAutoRaise(True)
         self.mMessageButton.setObjectName('mMessageLogViewerButton')
         self.mMessageButton.setCheckable(True)
         self.mMessageButton.setIcon(QgsApplication.getThemeIcon('/mMessageLogRead.svg'))
         self.mMessageButton.setToolTip('显示/隐藏日志消息')
-        self.statusbar.addPermanentWidget(self.mMessageButton)
+        self.mStatusBar.addPermanentWidget(self.mMessageButton)
+        self.mStatusBar.showMessage('就绪')
+
+    def showProgress(self, progress, totalSteps):
+        if progress == totalSteps:
+            self.mProgressBar.reset()
+            self.mProgressBar.hide()
+        else:
+            self.mProgressBar.setRange(0, totalSteps)
+            self.mProgressBar.setValue(progress)
+            self.mProgressBar.show()
+
+    def canvasRefreshStarted(self):
+        self.mRenderProgressBarTimer.stop()
+        self.mLastRenderTime.start()
+        if 0 < self.mLastRenderTimeSeconds < 0.5:
+            self.mRenderProgressBarTimer.start(500)
+        else: self.showProgress(-1, 0)
+
+    def canvasRefreshFinished(self):
+        self.mRenderProgressBarTimer.stop()
+        if self.mLastRenderTime.isValid(): self.mLastRenderTimeSeconds = self.mLastRenderTime.elapsed()/1000
+        self.showProgress(0, 0)
+
+    def updateCrsStatusBar(self):
+        crs = self.mProject.crs()
+        self.mOnTheFlyProjectionStatusButton.setText((crs.authid() or '未知 CRS') if crs.isValid() else '')
+        self.mOnTheFlyProjectionStatusButton.setToolTip(('当前 CRS：' + crs.userFriendlyIdentifier() + '；点击设置') if crs.isValid() else '无投影；点击设置')
+        self.mOnTheFlyProjectionStatusButton.setIcon(QgsApplication.getThemeIcon('/mIconProjectionEnabled.svg' if crs.isValid() else '/mIconProjectionDisabled.svg'))
+
+    def showRotation(self, *unused):
+        blocked = self.mRotationEdit.blockSignals(True)
+        self.mRotationEdit.setValue(self.mMapCanvas.rotation())
+        self.mRotationEdit.blockSignals(blocked)
 
 
 
@@ -323,7 +386,7 @@ class QgisApp(QMainWindow):
         self.addAction(self.mActionStyleDock)
         self.mActionStyleDock.toggled.connect(self.mapStyleDock)
         self.mLayerTreeToolBar.addAction(self.mActionStyleDock)
-        self.mLayerTreeToolBar.addAction(QgsApplication.getThemeIcon('/mActionAddGroup.svg'), '添加组', defaults.addGroup)
+        self.actionAddGroup = self.mLayerTreeToolBar.addAction(QgsApplication.getThemeIcon('/mActionAddGroup.svg'), '添加组', defaults.addGroup)
         self.mVisibilityPresetsButton = QToolButton()
         self.mVisibilityPresetsButton.setToolTip('管理地图主题')
         self.mVisibilityPresetsButton.setIcon(QgsApplication.getThemeIcon('/mActionShowAllLayers.svg'))
@@ -348,8 +411,14 @@ class QgisApp(QMainWindow):
         self.mLegendExpressionFilterButton.toggled.connect(self.toggleFilterLegendByExpression)
         self.mLegendExpressionFilterButton.expressionTextChanged.connect(lambda: self.toggleFilterLegendByExpression(self.mLegendExpressionFilterButton.isChecked()))
         self.mLayerTreeToolBar.addWidget(self.mLegendExpressionFilterButton)
-        self.mLayerTreeToolBar.addAction(QgsApplication.getThemeIcon('/mActionExpandTree.svg'), '展开全部', self.mLayerTreeView.expandAllNodes)
-        self.mLayerTreeToolBar.addAction(QgsApplication.getThemeIcon('/mActionCollapseTree.svg'), '折叠全部', self.mLayerTreeView.collapseAllNodes)
+        self.actionExpandAll = self.mLayerTreeToolBar.addAction(QgsApplication.getThemeIcon('/mActionExpandTree.svg'), '展开全部', self.mLayerTreeView.expandAllNodes)
+        self.actionCollapseAll = self.mLayerTreeToolBar.addAction(QgsApplication.getThemeIcon('/mActionCollapseTree.svg'), '折叠全部', self.mLayerTreeView.collapseAllNodes)
+        for name in ('actionAddGroup', 'actionExpandAll', 'actionCollapseAll', 'mActionStyleDock',
+                     'mFilterLegendByMapContentAction', 'mFilterLegendToggleShowPrivateLayersAction'):
+            action = getattr(self, name)
+            action.setObjectName(name)
+            self.mDynamicActions['qgisapp:' + name] = dict(action=action, handler=name, note='原版图层面板动态入口。',
+                                                          toolbarWidget=self.mLayerTreeToolBar, inInterface=True)
         self.mLayerTreeToolBar.addAction(self.mActionRemoveLayer)
         self.mMapCanvas.extentsChanged.connect(self.updateFilterLegend)
         layout.addWidget(self.mLayerTreeToolBar)
@@ -799,7 +868,14 @@ class QgisApp(QMainWindow):
         from .georeferencer.qgsgeorefmainwindow import QgsGeoreferencerMainWindow
         self.mGeoreferencer = QgsGeoreferencerMainWindow(self)
         self.bind('mActionShowGeoreferencer', self.showGeoreferencer,
-                  note='原版地理配准窗口及 24 个 Action；栅格/矢量源、控制点表/文件/拾取/移动、原生变换、输出、直方图与画布联动。栅格投影变换、PDF、停靠和矢量 GDAL 脚本仍未完成。')
+                  note='原版地理配准窗口及 24 个 Action；栅格/矢量配准与脚本、控制点、输出及画布联动。栅格投影变换、PDF 和停靠仍未完成。')
+        self.openProfileFolderAction = QAction('打开当前用户配置文件夹', self)
+        self.openProfileFolderAction.setObjectName('openProfileFolderAction')
+        self.openProfileFolderAction.triggered.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(QgsApplication.qgisSettingsDirPath())))
+        self.mConfigMenu = self.mSettingsMenu.addMenu('用户配置')
+        self.mConfigMenu.addAction(self.openProfileFolderAction)
+        self.mDynamicActions['qgisapp:openProfileFolderAction'] = dict(action=self.openProfileFolderAction,
+            handler='openProfileFolder', note='打开当前独立应用实际使用的 QGIS 配置目录。', inInterface=True)
         for name in self.mImplementedActions:
             action = getattr(self, name)
             action.setToolTip(self.mImplementedActions[name].get('note') or action.text())
@@ -1210,7 +1286,8 @@ class QgisApp(QMainWindow):
 
     def updateStatusBar(self):
         self.mScaleWidget.setScale(self.mMapCanvas.scale())
-        self.mOnTheFlyProjectionStatusButton.setText(self.mMapCanvas.mapSettings().destinationCrs().authid())
+        self.mCoordsEdit.coordinateDisplaySettingsChanged()
+        self.updateCrsStatusBar()
 
     def userScale(self):
         self.mScaleWidget.userScale()
@@ -1364,8 +1441,23 @@ class QgisApp(QMainWindow):
         self.updateRecentProjects()
     def updateRecentProjects(self):
         self.mRecentProjectsMenu.clear()
-        for path in self.mSettings.value('PythonDesktop/recentProjects', [], type=list):
+        paths = self.mSettings.value('PythonDesktop/recentProjects', [], type=list)
+        for path in paths:
             self.mRecentProjectsMenu.addAction(path, partial(self.addProject, path))
+        if not hasattr(self, 'clearRecentProjectsAction'):
+            self.clearRecentProjectsAction = QAction('清空列表', self)
+            self.clearRecentProjectsAction.setObjectName('clearRecentProjectsAction')
+            self.clearRecentProjectsAction.triggered.connect(self.clearRecentProjects)
+        self.clearRecentProjectsAction.setEnabled(bool(paths))
+        if paths:
+            self.mRecentProjectsMenu.addSeparator()
+            self.mRecentProjectsMenu.addAction(self.clearRecentProjectsAction)
+        self.mDynamicActions['qgisapp:clearRecentProjectsAction'] = dict(action=self.clearRecentProjectsAction,
+            handler='clearRecentProjects', note='清空最近工程记录，保留磁盘工程文件。', inInterface=True)
+
+    def clearRecentProjects(self):
+        self.mSettings.remove('PythonDesktop/recentProjects')
+        self.updateRecentProjects()
 
     def addUserInputWidget(self, widget):
         self.mUserInputDockWidget.addUserInputWidget(widget)

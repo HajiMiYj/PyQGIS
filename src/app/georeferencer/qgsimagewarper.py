@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import tempfile
 from osgeo import gdal
-from qgis.core import QgsVectorFileWriter, QgsFeedback, QgsCoordinateTransform
+from qgis.core import QgsVectorFileWriter, QgsFeedback, QgsCoordinateTransform, QgsProviderRegistry
 from qgis.analysis import QgsVectorWarper
 from .qgsgeoreftransform import QgsGeorefTransform
 
@@ -106,6 +106,56 @@ class QgsImageWarper:
             for suffix in ('', '-wal', '-shm'):
                 file = Path(temporary + suffix)
                 if file.exists(): file.unlink()
+
+    @staticmethod
+    def generateGDALogr2ogrCommand(layer, output, points, settings, context):
+        """Standalone GDAL Python equivalent of the native ogr2ogr command."""
+        kinds = QgsGeorefTransform.Method
+        orders = {kinds.PolynomialOrder1: 1, kinds.PolynomialOrder2: 2, kinds.PolynomialOrder3: 3}
+        method = settings['method']
+        if method not in orders and method != kinds.ThinPlateSpline:
+            raise ValueError('GDAL 矢量脚本支持一至三阶多项式及 TPS；其他方法请直接执行配准')
+        if layer.providerType() != 'ogr':
+            raise ValueError('此数据提供者不能由 GDAL 直接读取，请先导出到 GeoPackage')
+        parts = QgsProviderRegistry.instance().decodeUri('ogr', layer.source())
+        source = parts.get('path')
+        if not source: raise ValueError('无法解析 GDAL 源数据路径')
+        arguments = []
+        for point in points:
+            if not point.isEnabled(): continue
+            destination = point.destinationPoint()
+            if point.destinationPointCrs().isValid() and point.destinationPointCrs() != settings['crs']:
+                destination = QgsCoordinateTransform(point.destinationPointCrs(), settings['crs'], context).transform(destination)
+            arguments.extend(['-gcp', repr(point.sourcePoint().x()), repr(point.sourcePoint().y()),
+                              repr(destination.x()), repr(destination.y())])
+        arguments.extend(['-order', str(orders[method])] if method in orders else ['-tps'])
+        # GCP targets are already expressed in the target CRS: assign that CRS,
+        # without projecting the fitted coordinates a second time.
+        options = dict(format='GPKG', layerName='georeferenced', dstSRS=settings['crs'].toWkt(), reproject=False)
+        if parts.get('layerName'): options['layers'] = [parts['layerName']]
+        subset = layer.subsetString()
+        if subset:
+            if subset.lstrip().lower().startswith('select '):
+                options.pop('layers', None)
+                options['SQLStatement'] = subset
+            else: options['where'] = subset
+        return ('# Run using OSGeo4W Python.\nfrom pathlib import Path\nimport tempfile\nimport os\n'
+                'from osgeo import gdal\ngdal.UseExceptions()\n'
+                f'output = Path({str(output)!r})\n'
+                'if output.exists(): raise FileExistsError(output)\n'
+                f'source = gdal.OpenEx({source!r}, gdal.OF_VECTOR | gdal.OF_READONLY)\n'
+                'if source is None: raise RuntimeError("Cannot open source")\n'
+                f'options = {options!r}\n' +
+                (f'options["layers"] = [source.GetLayerByIndex({int(parts.get("layerId") or 0)}).GetName()]\n'
+                 if 'layers' not in options and 'SQLStatement' not in options else '') +
+                f'arguments = {arguments!r}\n'
+                'with tempfile.TemporaryDirectory(prefix=".georef-", dir=output.parent) as directory:\n'
+                '    temporary = Path(directory) / "result.gpkg"\n'
+                '    result = gdal.VectorTranslate(str(temporary), source, options=gdal.VectorTranslateOptions(options=arguments, **options))\n'
+                '    if result is None: raise RuntimeError("Vector warp failed")\n'
+                '    result.FlushCache()\n    result = source = None\n'
+                '    if output.exists(): raise FileExistsError(output)\n'
+                '    os.rename(temporary, output)\n')
 
     @staticmethod
     def generateGDALScript(path, output, points, settings, context, coords, transform):

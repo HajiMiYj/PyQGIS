@@ -5,7 +5,8 @@ from pathlib import Path
 from qgis.PyQt import uic, sip
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import (QMainWindow, QVBoxLayout, QActionGroup, QFileDialog,
-                                QMessageBox, QProgressDialog, QApplication, QDialog)
+                                QMessageBox, QProgressDialog, QApplication, QDialog,
+                                QPlainTextEdit, QDialogButtonBox)
 from qgis.core import (Qgis, QgsApplication, QgsPointXY, QgsRasterLayer, QgsVectorLayer,
                        QgsRectangle, QgsCoordinateReferenceSystem, QgsCoordinateTransform,
                        QgsSettings, QgsContrastEnhancement, QgsRasterMinMaxOrigin, QgsProviderRegistry)
@@ -110,7 +111,7 @@ class QgsGeoreferencerMainWindow(QMainWindow):
             note = '原版地理配准窗口 Action；连接源图层、控制点、原生变换器及画布状态。'
             if name == 'mActionStartGeoref': note = '栅格多项式/TPS/线性/Helmert、线性世界文件和原生矢量变换；取消、输出保护及加载。栅格投影变换和 PDF 输出未完成。'
             if name == 'mActionTransformSettings': note = '原版变换设置 UI；方法、CRS、重采样、压缩、分辨率、透明零值、世界文件、保存控制点及加载。PDF 报告/地图和栅格投影变换未完成。'
-            if name == 'mActionGDALScript': note = '生成可用 OSGeo Python 执行的独立 GDAL 栅格脚本；矢量脚本尚未移植。'
+            if name == 'mActionGDALScript': note = '预览、复制及保存独立 GDAL Python 脚本；栅格与 OGR 矢量、多项式/TPS、图层与子集过滤。'
             if name == 'mActionGeorefConfig': note = '原版配置 UI；控制点 ID/坐标提示与残差单位保存。停靠及 PDF 页面设置未移植。'
             self.mApp.mDynamicActions['georeferencer:' + name] = dict(action=action, handler=getattr(callback, '__name__', name),
                 toolbar=row.get('toolbar', ''), toolbarWidget=toolbar, inInterface=True, note=note)
@@ -133,7 +134,7 @@ class QgsGeoreferencerMainWindow(QMainWindow):
         for name in ('mActionOpenRaster', 'mActionOpenVector', 'mActionQuit', 'mActionGeorefConfig'):
             getattr(self, name).setEnabled(not self.mBusy)
         self.mActionStartGeoref.setEnabled(active and self.mTransform.mTransformer is not None)
-        self.mActionGDALScript.setEnabled(active and isinstance(self.mLayer, QgsRasterLayer) and self.mTransform.mTransformer is not None)
+        self.mActionGDALScript.setEnabled(active and self.mTransform.mTransformer is not None)
         self.mActionSaveGCPpoints.setEnabled(active and bool(self.mPoints))
         for action in (self.mActionDeletePoint, self.mActionMoveGCPPoint): action.setEnabled(active and bool(self.mPoints))
         for action in (self.mActionLocalHistogramStretch, self.mActionFullHistogramStretch): action.setEnabled(active and isinstance(self.mLayer, QgsRasterLayer))
@@ -421,17 +422,53 @@ class QgsGeoreferencerMainWindow(QMainWindow):
             self.updateActions()
 
     def generateGDALScript(self, path=None):
-        if not isinstance(self.mLayer, QgsRasterLayer): raise ValueError('矢量 GDAL 脚本尚未移植')
         self.pointsChanged(False)
         if not self.mTransform.mTransformer: raise ValueError(self.mTransform.mError)
         if self.mSettings['worldfile']: raise ValueError('世界文件模式请直接执行配准；生成脚本用于输出新栅格')
-        if path is None: path, _ = QFileDialog.getSaveFileName(self, '保存 GDAL Python 脚本', '', 'Python (*.py)')
-        if not path: return False
-        if Path(path).resolve() == Path(self.mSourceFile).resolve(): raise ValueError('脚本不能覆盖源数据')
-        script = QgsImageWarper.generateGDALScript(self.mSourceFile, self.mSettings['output'], self.mPoints, self.mSettings,
+        if not self.mSettings['output']:
+            self.showTransformSettingsDialog()
+            if not self.mSettings['output']: return False
+        if isinstance(self.mLayer, QgsRasterLayer):
+            script = QgsImageWarper.generateGDALScript(self.mSourceFile, self.mSettings['output'], self.mPoints, self.mSettings,
                                                    self.mApp.mProject.transformContext(), self.mRasterChangeCoords, self.mTransform)
+        else:
+            script = QgsImageWarper.generateGDALogr2ogrCommand(self.mLayer, self.mSettings['output'], self.mPoints,
+                                                              self.mSettings, self.mApp.mProject.transformContext())
+        if path is None: return self.showGDALScript(script)
+        return self.saveGDALScript(path, script)
+
+    def saveGDALScript(self, path, script):
+        if Path(path).resolve() in (Path(self.mSourceFile).resolve(), Path(self.mSettings['output']).resolve()):
+            raise ValueError('脚本不能覆盖源数据或配准输出文件')
         Path(path).write_text(script, encoding='utf-8')
         return str(path)
+
+    def showGDALScript(self, script):
+        dialog = QDialog(self)
+        dialog.setObjectName('dlgShowGdalScript')
+        dialog.setWindowTitle('GDAL Python 脚本')
+        dialog.resize(780, 480)
+        layout = QVBoxLayout(dialog)
+        editor = QPlainTextEdit(dialog)
+        editor.setObjectName('pteScript')
+        editor.setReadOnly(True)
+        editor.setLineWrapMode(QPlainTextEdit.NoWrap)
+        editor.setPlainText(script)
+        layout.addWidget(editor)
+        buttons = QDialogButtonBox(QDialogButtonBox.Close, parent=dialog)
+        copy = buttons.addButton('复制到剪贴板', QDialogButtonBox.ActionRole)
+        copy.setObjectName('pbnCopyInClipBoard')
+        copy.clicked.connect(lambda: QApplication.clipboard().setText(editor.toPlainText()))
+        save = buttons.addButton('保存脚本…', QDialogButtonBox.ActionRole)
+        def saveScript():
+            path, _ = QFileDialog.getSaveFileName(dialog, '保存 GDAL Python 脚本', '', 'Python (*.py)')
+            if path: self.invoke(lambda: self.saveGDALScript(path, editor.toPlainText()))
+        save.clicked.connect(saveScript)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        dialog.exec_()
+        dialog.deleteLater()
+        return True
 
     def zoomToLayerTool(self):
         if self.mLayer:

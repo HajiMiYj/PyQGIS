@@ -1,5 +1,5 @@
 """Counterpart of src/app/qgsstatusbarscalewidget.cpp."""
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import Qt, QLocale
 from qgis.PyQt.QtWidgets import QWidget, QHBoxLayout, QLabel
 from qgis.core import QgsProject
 from qgis.gui import QgsScaleComboBox
@@ -12,10 +12,13 @@ class QgsStatusBarScaleWidget(QWidget):
         self.mLabel = QLabel('比例尺', self)
         self.mLabel.setObjectName('mScaleLabel')
         self.mLabel.setMargin(3)
+        self.mLabel.setAlignment(Qt.AlignCenter)
+        self.mLabel.setMinimumWidth(10)
+        self.mLabel.setToolTip('当前地图比例尺')
         self.mScale = QgsScaleComboBox(self)
         self.mScale.setObjectName('mScaleEdit')
         self.mScale.setToolTip('当前地图比例尺')
-        self.mScale.setMaximumWidth(145)
+        self.mScale.setMinimumWidth(10)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -38,5 +41,5 @@ class QgsStatusBarScaleWidget(QWidget):
     def userScale(self): self.mMapCanvas.zoomScale(self.mScale.scale())
     def updateScales(self):
         settings = QgsProject.instance().viewSettings()
-        if settings.useProjectScales(): self.mScale.updateScales([f'1:{scale:g}' for scale in settings.mapScales()])
+        if settings.useProjectScales(): self.mScale.updateScales(['1:' + QLocale().toString(scale, 'f', 0) for scale in settings.mapScales()])
         else: self.mScale.updateScales()

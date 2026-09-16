@@ -29,6 +29,7 @@ def main():
     parser.add_argument('--mesh-edit-test', action='store_true', help='Run mesh triangulation, edge, face preview and keyboard checks')
     parser.add_argument('--dwg-import-test', action='store_true', help='Run CAD import, preview, grouping and cancellation checks')
     parser.add_argument('--georeferencer-test', action='store_true', help='Run georeferencer actions, GCP IO, raster and vector output checks')
+    parser.add_argument('--statusbar-test', action='store_true', help='Run native status bar layout and interaction checks')
     parser.add_argument('--partial-actions-test', action='store_true', help='Run focused annotation editing and report grouping checks')
     parser.add_argument('--profile', default=str(ROOT / '.runtime/profile'))
     parser.add_argument('-C', '--nocustomization', action='store_true', help='Skip saved interface customization for this run')
@@ -37,7 +38,7 @@ def main():
     if args.customizationfile:
         args.customizationfile = str(Path(args.customizationfile).resolve())
         if not Path(args.customizationfile).is_file(): parser.error('Customization INI file does not exist')
-    if args.customization_test or args.mesh_edit_test or args.dwg_import_test or args.georeferencer_test: args.smoke_test = True
+    if args.customization_test or args.mesh_edit_test or args.dwg_import_test or args.georeferencer_test or args.statusbar_test: args.smoke_test = True
     args.smoke_test = args.smoke_test or args.labeling_test or args.annotation_test or args.data_actions_test or args.toolbar_test or args.shape_test or args.remaining_actions_test or args.view_actions_test or args.decoration_test or args.partial_actions_test or args.trim_extend_test
     def stage(name):
         if args.smoke_test:
@@ -97,7 +98,9 @@ def main():
         window.addProject(args.project)
     if args.smoke_test:
         def smoke():
-            if args.georeferencer_test:
+            if args.statusbar_test:
+                from tests.src.python.test_qgisapp_statusbar import run
+            elif args.georeferencer_test:
                 from tests.src.python.test_qgisapp_georeferencer import run
             elif args.dwg_import_test:
                 from tests.src.python.test_qgisapp_dwgimport import run
@@ -142,6 +145,7 @@ def main():
                 if args.mesh_edit_test: reportName = 'mesh-edit-test.json'
                 if args.dwg_import_test: reportName = 'dwg-import-test.json'
                 if args.georeferencer_test: reportName = 'georeferencer-test.json'
+                if args.statusbar_test: reportName = 'statusbar-test.json'
                 if args.partial_actions_test: reportName = 'partial-actions-test.json'
                 (out / reportName).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
                 stage('report-written')
