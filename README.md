@@ -185,4 +185,6 @@ Action 源码核对脚本为 `scripts/audit_upstream_actions.py`，扫描原版 
 
 状态栏已对照 3.34.10 的 `createStatusBar` 及坐标、比例尺、放大镜控件调整：使用原生 `QgsStatusBar` 容器、左侧固定搜索与 Ctrl+K、工程显示 CRS/轴顺序/精度、范围两端坐标、比例尺锁定、旋转无反馈回写、延迟渲染进度、CRS 状态与日志按钮同步。专项运行 `.\run-qgis-python.cmd --statusbar-test`，结果与截图为 `output/statusbar-test.json`、`output/statusbar.png`。本批对齐常规状态栏交互；原版坐标框的彩蛋命令尚未移植。
 
+图层树右键菜单补齐：更改/修复数据源（原生 `QgsDataSourceSelectDialog`，保留子集串并自动修复同路径损坏图层）、缩放到可见比例尺、打开/创建/从 VAT.DBF 加载栅格属性表、设置组 WMS 数据（原生 `QgsGroupWmsDataDialog`）。上游未绑定 `QgsLoadRasterAttributeTableDialog`/`QgsCreateRasterAttributeTableDialog`，已在 `src/app/qgsrasterattributetableapputils.py` 按原生逻辑重建。运行 `.\run-qgis-python.cmd --layertree-test`，结果为 `output/layertree-test.json`；该测试直接调用菜单处理器（模态对话框打桩），用于捕获只在点击右键菜单时才出现的错误。
+
 QGIS 原版及本项目的相关移植代码遵循根目录 `COPYING`；资源保留原有许可说明。

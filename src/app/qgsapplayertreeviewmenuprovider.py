@@ -1,7 +1,8 @@
 """Application layer-tree context menu; upstream class/file names retained."""
 from qgis.PyQt.QtWidgets import QMenu, QInputDialog, QAction
 from qgis.core import (QgsLayerTreeLayer, QgsLayerTreeGroup, QgsMapLayerType,
-                       QgsVectorLayer, QgsVectorTileLayer, QgsAbstractVectorLayerLabeling, QgsVectorLayerSimpleLabeling)
+                       QgsVectorLayer, QgsRasterLayer, QgsMeshLayer, QgsPointCloudLayer,
+                       QgsVectorTileLayer, QgsAbstractVectorLayerLabeling, QgsVectorLayerSimpleLabeling)
 from qgis.gui import QgsLayerTreeViewMenuProvider
 
 
@@ -34,6 +35,21 @@ class QgsAppLayerTreeViewMenuProvider(QgsLayerTreeViewMenuProvider):
         self.actionShowLabels.toggled.connect(self.toggleLabels)
         app.mDynamicActions['layertree:actionShowLabels'] = dict(action=self.actionShowLabels, handler='toggleLabels',
             note='所选矢量/矢量瓦片标注显隐；无配置时使用原生默认标注设置。', inInterface=True)
+        for name, label, note in [
+                ('changeDataSource', '更改数据源…', '原版 QgsDataSourceSelectDialog 选择新数据源；修复无效图层、保留子集串、刷新图层树，并自动修复同路径的其他损坏图层。'),
+                ('zoomToLayerScale', '缩放到可见比例尺', '当前图层超出其比例尺可见范围时缩放到最近可见比例尺。'),
+                ('openRasterAttributeTable', '打开栅格属性表', '原生 QgsRasterAttributeTableDialog 打开当前栅格图层属性表。'),
+                ('createRasterAttributeTable', '创建栅格属性表', '从 Paletted/伪彩色渲染器创建栅格属性表，支持本机或 DBF 存储。'),
+                ('loadRasterAttributeTableFromFile', '从 VAT.DBF 加载栅格属性表', '读取 VAT.DBF 文件并按波段写入栅格图层。'),
+                ('legendGroupSetWmsData', '设置组 WMS 数据…', '原生 QgsGroupWmsDataDialog 编辑组 WMS 短名/标题/摘要，写入组自定义属性。')]:
+            action = QAction(label, app)
+            action.setObjectName(name)
+            if name == 'changeDataSource':
+                action.triggered.connect(lambda checked=False: app.changeDataSource(self.mView.currentLayer()))
+            else:
+                action.triggered.connect(getattr(app, name))
+            self.mContextActions[name] = action
+            app.mDynamicActions['layertree:' + name] = dict(action=action, handler=name, note=note, inInterface=True)
 
     def toggleLabels(self, enabled):
         for node in self.mView.selectedLayerNodes():
@@ -64,6 +80,7 @@ class QgsAppLayerTreeViewMenuProvider(QgsLayerTreeViewMenuProvider):
             for name in ('actionZoomToGroup', 'actionCheckAndAllChildren', 'actionUncheckAndAllChildren',
                          'actionMoveToTop', 'actionMoveToBottom'):
                 menu.addAction(self.mContextActions[name])
+            menu.addAction(self.mContextActions['legendGroupSetWmsData'])
             menu.addAction(defaults.actionMutuallyExclusiveGroup(menu))
             menu.addAction(defaults.actionGroupSelected(menu))
             menu.addAction('保存为图层定义文件…', self.mApp.saveAsLayerDefinition)
@@ -87,6 +104,19 @@ class QgsAppLayerTreeViewMenuProvider(QgsLayerTreeViewMenuProvider):
             if action:
                 menu.addAction(action)
         menu.addAction(defaults.actionShowInOverview(menu))
+        if layer.hasScaleBasedVisibility() and not layer.isInScaleRange(self.mCanvas.scale()):
+            menu.addAction(self.mContextActions['zoomToLayerScale'])
+        if isinstance(layer, (QgsVectorLayer, QgsRasterLayer, QgsMeshLayer, QgsPointCloudLayer)):
+            changeAction = self.mContextActions['changeDataSource']
+            changeAction.setText('修复数据源…' if not layer.isValid() else '更改数据源…')
+            changeAction.setEnabled(not layer.isEditable())
+            menu.addAction(changeAction)
+        if isinstance(layer, QgsRasterLayer):
+            if layer.attributeTableCount() > 0:
+                menu.addAction(self.mContextActions['openRasterAttributeTable'])
+            elif layer.canCreateRasterAttributeTable():
+                menu.addAction(self.mContextActions['createRasterAttributeTable'])
+            menu.addAction(self.mContextActions['loadRasterAttributeTableFromFile'])
         if layer.type() == QgsMapLayerType.VectorLayer:
             menu.addSeparator()
             for name in ['mActionOpenTable', 'mActionToggleEditing', 'mActionSaveEdits', 'mActionLayerSubsetString']:

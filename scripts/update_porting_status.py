@@ -24,7 +24,6 @@ PARTIAL_ACTIONS = {
 
 # Implementations written in a batch awaiting the user's combined runtime QA.
 PENDING_RUNTIME_ACTIONS = {'mMainAnnotationLayerProperties', 'mActionElevationProfile'}
-PENDING_PLUGIN_INTEGRATION = {'db_manager:action', 'MetaSearch:action_run'}
 
 
 def implementationState(action):
@@ -32,8 +31,7 @@ def implementationState(action):
     if action.get('objectName') == 'mActionAddLayerSeparator' and action['status'] == 'connected': return 'ui-placeholder'
     if action.get('objectName') == 'mActionOptions': return 'paused'
     key = action.get('sourceKey') or action['objectName']
-    if action['status'] == 'not-ported':
-        return 'plugin-integration-pending' if key in PENDING_PLUGIN_INTEGRATION else 'not-ported'
+    if action['status'] == 'not-ported': return 'not-ported'
     if key in PARTIAL_ACTIONS: return 'partial'
     if key in PENDING_RUNTIME_ACTIONS: return 'implemented-pending-debug'
     return 'implemented'
@@ -46,8 +44,7 @@ def label(action):
     return {'excluded-gps': '排除 GPS', 'not-ported': '未实现', 'paused': '暂停',
             'ui-placeholder': '已接入（隐藏插入锚点）',
             'partial': '部分实现', 'implemented': '已接入',
-            'implemented-pending-debug': '已接入，待调试',
-            'plugin-integration-pending': '未接入，待验证'}[implementationState(action)]
+            'implemented-pending-debug': '已接入，待调试'}[implementationState(action)]
 
 
 def writeChecklist(status):
