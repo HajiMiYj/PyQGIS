@@ -1,7 +1,7 @@
 """Locator options; the SIP-unbound prefix setter remains read-only."""
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import QTableWidget, QTableWidgetItem, QPushButton
-from qgis.core import QgsLocator
+from qgis.core import QgsSettings
 
 
 class QgsLocatorOptionsWidget(QTableWidget):
@@ -27,10 +27,14 @@ class QgsLocatorOptionsWidget(QTableWidget):
         self.resizeColumnsToContents()
     def commitChanges(self):
         self.mLocatorWidget.locator().cancel()
+        # QgsLocator::settingsLocatorFilterEnabled/Default are QgsSettingsEntry
+        # class attributes that are not exposed to Python; they live under the
+        # "locator-filters" named list node (src/core/locator/qgslocator.h).
+        settings = QgsSettings()
         for row, filter in enumerate(self.mFilters):
             enabled, default = [self.item(row, col).checkState() == Qt.Checked for col in (1, 2)]
-            QgsLocator.settingsLocatorFilterEnabled.setValue(enabled, filter.name())
-            QgsLocator.settingsLocatorFilterDefault.setValue(default, filter.name())
+            settings.setValue('locator-filters/' + filter.name() + '/enabled', enabled)
+            settings.setValue('locator-filters/' + filter.name() + '/default', default)
             filter.setEnabled(enabled)
             filter.setUseWithoutPrefix(default)
         self.mLocatorWidget.invalidateResults()

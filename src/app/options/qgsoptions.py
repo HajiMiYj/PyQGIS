@@ -9,12 +9,16 @@ from qgis.PyQt.QtWidgets import QVBoxLayout, QToolBar, QFileDialog, QInputDialog
 from qgis.core import (QgsApplication, QgsSettings, QgsSettingsRegistryCore, QgsCoordinateReferenceSystem,
                        QgsExpressionContextUtils, QgsNetworkAccessManager, QgsLayerTreeModel, Qgis, QgsTolerance)
 from qgis.gui import QgsOptionsDialogBase, QgsGui
-from .qgsoptionsbindings import BINDINGS, CORE_BINDINGS
+from .qgsoptionsbindings import BINDINGS, CORE_BINDINGS, ENTRY_BINDINGS
 from .qgsrenderingoptions import QgsRenderingOptionsWidget
 from .qgsconfigureshortcutsdialog import QgsConfigureShortcutsDialog
 
 ROOT = Path(__file__).resolve().parents[3]
 GETTERS = {'setChecked': 'isChecked', 'setValue': 'value', 'setText': 'text', 'setCurrentIndex': 'currentIndex', 'setColor': 'color', 'setCurrentText': 'currentText'}
+# Qgis::defaultProjectScales(), used as the registry entry's default value.
+DEFAULT_SCALES = (Qgis.defaultProjectScales().split(',') if hasattr(Qgis, 'defaultProjectScales')
+                  else ['1:1000000', '1:500000', '1:250000', '1:100000', '1:50000', '1:25000',
+                        '1:10000', '1:5000', '1:2500', '1:1000', '1:500'])
 
 
 class QgsOptions(QgsOptionsDialogBase):
@@ -45,13 +49,16 @@ class QgsOptions(QgsOptionsDialogBase):
         for name, setter, key, default in BINDINGS:
             # Display counts need a separate layer-tree indicator implementation.
             self.bindSetting(name, setter, key, default)
-        for name, setter, entryName in CORE_BINDINGS:
-            if name == 'mShowFeatureCountByDefaultCheckBox': continue
-            entry = getattr(QgsSettingsRegistryCore, entryName, None)
-            if entry is not None:
-                widget = self.enable(name)
-                getattr(widget, setter)(entry.value())
-                self.mCoreBindings.append((entry, widget, GETTERS[setter]))
+        for name, setter, key, default in ENTRY_BINDINGS:
+            # Native drives these through QgsSettingsRegistryCore entries, which
+            # are not exposed to Python; the raw registry keys are used instead.
+            self.bindSetting(name, setter, key, default)
+        self.initDigitizing()
+
+    def initDigitizing(self):
+        # Geometry validation is a combo whose native save uses currentData().
+        self.comboSetting('mValidateGeometries', 'digitizing/validate-geometries',
+                          [('关闭', 0), ('QGIS', 1), ('GEOS', 2)], 1)
         self.initGeneral()
         self.initNetwork()
         self.initMapTools()
@@ -219,7 +226,7 @@ class QgsOptions(QgsOptionsDialogBase):
         self.setScales(scales)
         self.enable('pbnAddScale').clicked.connect(self.addScale)
         self.enable('pbnRemoveScale').clicked.connect(lambda: self.mListGlobalScales.takeItem(self.mListGlobalScales.currentRow()))
-        self.enable('pbnDefaultScaleValues').clicked.connect(lambda: self.setScales(QgsSettingsRegistryCore.settingsMapScales.defaultValue()))
+        self.enable('pbnDefaultScaleValues').clicked.connect(lambda: self.setScales(DEFAULT_SCALES))
 
     def setScales(self, scales):
         self.mListGlobalScales.clear()
@@ -260,7 +267,9 @@ class QgsOptions(QgsOptionsDialogBase):
         for prefix, widget in self.mColorBindings:
             for component, value in zip(('red', 'green', 'blue', 'alpha'), widget.color().getRgb()):
                 self.mSettings.setValue('qgis/' + prefix + '_' + component, value)
-        QgsSettingsRegistryCore.settingsMapScales.setValue([self.mListGlobalScales.item(i).text() for i in range(self.mListGlobalScales.count())])
+        # Native writes QgsSettingsRegistryCore::settingsMapScales, which is not
+        # exposed to Python; the entry lives at map/default_scales.
+        self.mSettings.setValue('map/default_scales', [self.mListGlobalScales.item(i).text() for i in range(self.mListGlobalScales.count())])
         QgsExpressionContextUtils.setGlobalVariables(self.mVariableEditor.variablesInActiveScope())
         self.mDefaultDatumTransformTableWidget.transformContext().writeSettings()
         self.mLocatorOptionsWidget.commitChanges()

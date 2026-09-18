@@ -42,6 +42,7 @@ from qgis.gui import (
     QgsAttributeTableFilterModel, QgsCustomLayerOrderWidget, QgsMapOverviewCanvas,
 )
 from .qgsguivectorlayertools import QgsGuiVectorLayerTools
+from .ui_defaults import DEFAULT_UI_STATE
 from .qgsmaptooladdfeature import QgsMapToolAddFeature
 from .qgisappinterface import QgisAppInterface
 from .qgsapplayertreeviewmenuprovider import QgsAppLayerTreeViewMenuProvider
@@ -59,9 +60,13 @@ class QgisApp(QMainWindow):
     def instance():
         return QgisApp._instance
 
-    def __init__(self, customization=True, customizationFile=None):
+    def __init__(self, customization=True, customizationFile=None, rootProfileFolder=None, profileName=''):
         super().__init__()
         QgisApp._instance = self
+        from qgis.core import QgsUserProfileManager
+        self.mRootProfileFolder = rootProfileFolder
+        self.mProfileName = profileName
+        self.mUserProfileManager = QgsUserProfileManager(rootProfileFolder) if rootProfileFolder else None
         self.runtimeErrors = []
         self.mWindows = []
         self.mLayoutDesigners = []
@@ -972,6 +977,14 @@ class QgisApp(QMainWindow):
         self.openProfileFolderAction.triggered.connect(
             lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(QgsApplication.qgisSettingsDirPath())))
         self.mConfigMenu = self.mSettingsMenu.addMenu('用户配置')
+        self.newProfileAction = QAction('新建配置…', self)
+        self.newProfileAction.setObjectName('newProfileAction')
+        self.newProfileAction.triggered.connect(self.newProfile)
+        self.mConfigMenu.addAction(self.newProfileAction)
+        self.mDynamicActions['qgisapp:newProfileAction'] = dict(action=self.newProfileAction,
+            handler='newProfile',
+            note='原版 QgsNewNameDialog 输入名称并创建用户配置，随后以该配置启动新的应用实例。',
+            inInterface=True)
         self.mConfigMenu.addAction(self.openProfileFolderAction)
         self.mDynamicActions['qgisapp:openProfileFolderAction'] = dict(action=self.openProfileFolderAction,
                                                                        handler='openProfileFolder',
@@ -1084,6 +1097,33 @@ class QgisApp(QMainWindow):
         for index in range(layerToolBarLayout.count()):
             layerToolBarLayout.itemAt(index).setAlignment(Qt.AlignLeft)
 
+    # Enum key names native QGIS writes for tool-button defaults.
+    SETTING_ENUM_NAMES = {
+        'ActiveLayer': 0, 'AllLayers': 1,
+        'AllowIntersections': 0, 'AvoidIntersectionsCurrentLayer': 1, 'AvoidIntersectionsLayers': 2,
+    }
+
+    def intSetting(self, key, default):
+        """Read an int setting, tolerating the enum key names native QGIS stores.
+
+        Upstream uses QgsSettings::enumValue() here, which accepts either an int
+        or the enum key name; a typed int read would abort on the stored string.
+        """
+        raw = self.mSettings.value(key, None)
+        if raw is None:
+            return default
+        if isinstance(raw, bool):
+            return int(raw)
+        if isinstance(raw, int):
+            return raw
+        text = str(raw)
+        if text in QgisApp.SETTING_ENUM_NAMES:
+            return QgisApp.SETTING_ENUM_NAMES[text]
+        try:
+            return int(text)
+        except (TypeError, ValueError):
+            return default
+
     def createToolButton(self, toolbar, actions, before, name, key, values=None, default=None):
         button = QToolButton(toolbar)
         button.setPopupMode(QToolButton.MenuButtonPopup)
@@ -1093,7 +1133,7 @@ class QgisApp(QMainWindow):
             toolbar.removeAction(action)
             menu.addAction(action)
         values = values or list(range(len(actions)))
-        value = self.mSettings.value(key, values[0] if default is None else default, type=int)
+        value = self.intSetting(key, values[0] if default is None else default)
         button.setDefaultAction(actions[values.index(value) if value in values else 0])
 
         def triggered(action):
@@ -1648,8 +1688,68 @@ class QgisApp(QMainWindow):
     def fileClose(self):
         return self.fileNew()
 
+    def userProfileManager(self):
+        return self.mUserProfileManager
+
+    def updateLastProfileName(self):
+        """Native QgsUserProfileManager::updateLastProfileName() (SIP_SKIP).
+
+        The manager exposes the profiles.ini QSettings, so the same write is
+        performed through it instead of the unmapped method.
+        """
+        manager = self.mUserProfileManager
+        if manager is None or not self.mProfileName:
+            return
+        settings = manager.settings()
+        settings.setValue('/core/lastProfile', self.mProfileName)
+        settings.sync()
+
+    def newProfile(self):
+        # Native QgisApp::newProfile(): name a profile, create it, then start
+        # another instance on it (QgsUserProfileManager::loadUserProfile()).
+        manager = self.mUserProfileManager
+        if manager is None:
+            self.mMessageBar.pushWarning('新建配置', '当前启动方式没有可用的配置档案目录。')
+            return
+        from qgis.gui import QgsNewNameDialog
+        dialog = QgsNewNameDialog('', '', [], manager.allProfiles(), Qt.CaseInsensitive, self)
+        dialog.setConflictingNameWarning('已存在同名配置')
+        dialog.setOverwriteEnabled(False)
+        dialog.setHintString('新配置名称')
+        dialog.setWindowTitle('新建配置名称')
+        dialog.setRegularExpression('[^/\\\\]+')
+        if dialog.exec_() != QDialog.Accepted:
+            return
+        profileName = dialog.name()
+        error = manager.createUserProfile(profileName)
+        if error.isEmpty():
+            self.loadUserProfile(profileName)
+            return
+        QMessageBox.warning(self, '新建配置', f"无法创建文件夹 '{profileName}'")
+
+    def loadUserProfile(self, name):
+        """Native QgsUserProfileManager::loadUserProfile().
+
+        Upstream spawns QCoreApplication::applicationFilePath() with '--profile'.
+        This desktop entry runs under the OSGeo4W interpreter, so the script path
+        has to be passed explicitly for the new instance to start correctly.
+        """
+        import sys
+        from qgis.PyQt.QtCore import QProcess
+        cleaned, skip = [], False
+        for value in list(sys.argv[1:]):
+            if skip: skip = False; continue
+            if value == '--profile': skip = True; continue
+            cleaned.append(value)
+        QProcess.startDetached(sys.executable, [sys.argv[0]] + cleaned + ['--profile', name])
+
     def fileExit(self):
-        self.close()
+        # Native QgisApp::fileExit(): confirmations, then leave the event loop.
+        if not (self.saveDirty() and self.checkExitBlockers() and self.mGeoreferencer.canClose()):
+            return
+        self.updateLastProfileName()
+        self.prepareToQuit()
+        QgsApplication.exit(0)
 
     def fileOpen(self):
         path, _ = QFileDialog.getOpenFileName(self, '打开工程', '', 'QGIS 工程 (*.qgz *.qgs)')
@@ -3058,21 +3158,39 @@ class QgisApp(QMainWindow):
         self.mGeoreferencer.activateWindow()
         return self.mGeoreferencer
 
-    def closeEvent(self, event):
-        if not self.saveDirty():
-            event.ignore()
-            return
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Native defers QMainWindow::restoreState() to the first show so dock
+        # geometry is applied once the window has been laid out (QTBUG-89034),
+        # and falls back to the built-in default layout from ui_defaults.h.
+        if getattr(self, 'mWindowStateRestored', False): return
+        self.mWindowStateRestored = True
+        # Restoring the saved toolbar state also restores the checked capture
+        # technique action, which would silently switch the digitizing tools
+        # between straight/curve/stream capture. Preserve the active technique.
+        technique = getattr(self.mMapCanvas.mapTool(), 'currentCaptureTechnique', lambda: None)()
+        savedState = self.mSettings.value('UI/state', b'')
+        if not (savedState and self.restoreState(savedState)):
+            self.restoreState(DEFAULT_UI_STATE)
+        if technique is not None:
+            self.mMapToolsDigitizingTechniqueManager.setCaptureTechnique(technique)
+
+    def saveWindowState(self):
+        # Native QgisApp::saveWindowState(), invoked from QApplication.aboutToQuit.
+        self.mSettings.setValue('UI/state', self.saveState())
+        self.mSettings.setValue('UI/geometry', self.saveGeometry())
+        if self.mPluginManager: self.mPluginManager.unloadAll()
+
+    def checkExitBlockers(self):
         for blocker in self.mQgisInterface.mExitBlockers:
-            if not blocker.allowExit():
-                event.ignore()
-                return
-        if not self.mGeoreferencer.canClose():
-            event.ignore()
-            return
-        self.mSettings.setValue('PythonDesktop/geometry', self.saveGeometry())
-        self.mSettings.setValue('PythonDesktop/state', self.saveState())
-        self.prepareToQuit()
-        event.accept()
+            if not blocker.allowExit(): return False
+        return True
+
+    def closeEvent(self, event):
+        # Native QgisApp::closeEvent() always ignores the close event and runs
+        # its own exit sequence, so the window only closes once fileExit() agrees.
+        event.ignore()
+        self.fileExit()
 
     def prepareToQuit(self):
         # Run after close confirmation, while the event loop and normal layer
