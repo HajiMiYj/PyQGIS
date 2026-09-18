@@ -70,6 +70,8 @@ class QgisApp(QMainWindow):
         self.mLayerClipboard = []
         self.mDataSourceManagerDialog = None
         self.mProcessingPlugin = None
+        self.mDbManagerPlugin = None
+        self.mMetaSearchPlugin = None
         self.mPluginManager = None
         self.mShutdown = False
         self.mImplementedActions = {}
@@ -116,6 +118,7 @@ class QgisApp(QMainWindow):
         from .mesh.qgsmaptooleditmeshframe import QgsMapToolEditMeshFrame
         self.mMeshEditTool = QgsMapToolEditMeshFrame(self.mMapCanvas, self.mAdvancedDigitizingDockWidget, self)
         self.initProcessing()
+        self.initCorePlugins()
         self.setTheme()
         self.createToolBars()
         from .qgssnappingwidget import QgsSnappingWidget
@@ -1009,6 +1012,23 @@ class QgisApp(QMainWindow):
         self.mProcessingPlugin.locator_filter = AlgorithmLocatorFilter()
         self.mQgisInterface.registerLocatorFilter(self.mProcessingPlugin.locator_filter)
         self.excludeGpsFromToolbox()
+
+    def initCorePlugins(self):
+        """Load OSGeo4W core Python plugins (db_manager, MetaSearch) like upstream corePlugins."""
+        from db_manager import classFactory as dbFactory
+        self.mDbManagerPlugin = dbFactory(self.mQgisInterface)
+        self.mDbManagerPlugin.initGui()
+        self.mDynamicActions['db_manager:action'] = dict(
+            action=self.mDbManagerPlugin.action, handler='DBManagerPlugin.run',
+            toolbar='mDatabaseToolBar', inInterface=True,
+            note='原生 OSGeo4W DB Manager 插件；数据库树、SQL 窗口、表/字段/约束管理与导入导出，经 addPluginToDatabaseMenu 挂入数据库菜单。')
+        from MetaSearch import classFactory as msFactory
+        self.mMetaSearchPlugin = msFactory(self.mQgisInterface)
+        self.mMetaSearchPlugin.initGui()
+        self.mDynamicActions['MetaSearch:action_run'] = dict(
+            action=self.mMetaSearchPlugin.action_run, handler='MetaSearchPlugin.run',
+            toolbar='mWebToolBar', inInterface=True,
+            note='原生 OSGeo4W MetaSearch 插件；CSW 元数据目录搜索，经 addPluginToWebMenu 挂入 Web 菜单。')
 
     def excludeGpsFromToolbox(self):
         from qgis.PyQt.QtCore import QModelIndex
@@ -2533,6 +2553,8 @@ class QgisApp(QMainWindow):
         self.mStatisticalSummaryDockWidget.shutdown()
         if self.mPluginManager: self.mPluginManager.unloadAll()
         if self.mProcessingPlugin: self.mProcessingPlugin.unload()
+        if self.mDbManagerPlugin: self.mDbManagerPlugin.unload()
+        if self.mMetaSearchPlugin: self.mMetaSearchPlugin.unload()
         self.mLocatorWidget.locator().cancel()
         self.mMapCanvas.stopRendering()
         for canvas in self.mAdditionalCanvases: canvas.stopRendering()
