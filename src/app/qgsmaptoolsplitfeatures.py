@@ -43,7 +43,12 @@ class _GeometryEditCapture(QgsMapToolCapture):
                 result = getattr(layer, self.mOperation)([QgsPointXY(point) for point in points], QgsProject.instance().topologicalEditing())
                 success = result == Qgis.GeometryOperationResult.Success
             elif self.mOperation == 'addRing':
-                result = layer.addCurvedRing(geometry.constGet().exteriorRing().clone())
+                # The captured ring arrives as a surface with the polygon capture
+                # technique, but as a bare curve (QgsCompoundCurve) with the curve
+                # techniques, which has no exteriorRing().
+                captured = geometry.constGet()
+                ring = captured.exteriorRing().clone() if isinstance(captured, QgsCurvePolygon) else captured.clone()
+                result = layer.addCurvedRing(ring)
                 success = (result[0] if isinstance(result, tuple) else result) == Qgis.GeometryOperationResult.Success
             elif self.mOperation == 'addPart':
                 # The two point-list SIP overloads are ambiguous in 3.34. Pass

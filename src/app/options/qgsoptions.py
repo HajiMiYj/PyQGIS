@@ -5,7 +5,8 @@ import xml.etree.ElementTree as ET
 from qgis.PyQt import uic
 from qgis.PyQt.QtCore import Qt, QSize, QUrl
 from qgis.PyQt.QtGui import QStandardItem, QStandardItemModel, QColor, QDesktopServices, QFont
-from qgis.PyQt.QtWidgets import QVBoxLayout, QToolBar, QFileDialog, QInputDialog, QListWidgetItem, QMessageBox
+from qgis.PyQt.QtWidgets import (QVBoxLayout, QToolBar, QFileDialog, QInputDialog, QListWidgetItem,
+                                 QMessageBox, QStyleFactory)
 from qgis.core import (QgsApplication, QgsSettings, QgsSettingsRegistryCore, QgsCoordinateReferenceSystem,
                        QgsExpressionContextUtils, QgsNetworkAccessManager, QgsLayerTreeModel, Qgis, QgsTolerance,
                        QgsUserColorScheme)
@@ -13,6 +14,13 @@ from qgis.gui import QgsOptionsDialogBase, QgsGui
 from .qgsoptionsbindings import (BINDINGS, CORE_BINDINGS, ENTRY_BINDINGS,
                                  PLAIN_BINDINGS, COMBO_BINDINGS, COLOR_BINDINGS)
 from .qgsrenderingoptions import QgsRenderingOptionsWidget
+from .qgsrasterrenderingoptions import QgsRasterRenderingOptionsWidget
+from .qgsvectorrenderingoptions import QgsVectorRenderingOptionsWidget
+from .qgselevationoptions import QgsElevationOptionsWidget
+from .qgsadvancedoptions import QgsAdvancedSettingsWidget
+from .qgsuserprofileoptions import QgsUserProfileOptionsWidget
+from .qgsfontoptions import QgsFontOptionsWidget
+from .qgscodeeditoroptions import QgsCodeEditorOptionsWidget
 from .qgsconfigureshortcutsdialog import QgsConfigureShortcutsDialog
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -75,6 +83,41 @@ class QgsOptions(QgsOptionsDialogBase):
         self.mRenderingOptionsWidget = QgsRenderingOptionsWidget(self)
         self.insertPage('渲染', '渲染', QgsApplication.getThemeIcon('/propertyicons/rendering.svg'), self.mRenderingOptionsWidget, 'mOptionsPageMapCanvas', [], 'rendering')
         self.mPages.append(self.mRenderingOptionsWidget)
+        # Native registers the raster and vector rendering pages as options widget
+        # factories whose path() is {"rendering"}, so they nest under Rendering.
+        self.mRasterRenderingOptionsWidget = QgsRasterRenderingOptionsWidget(self)
+        self.addPage('栅格', '栅格渲染默认值', QgsApplication.getThemeIcon('mIconRaster.svg'),
+                     self.mRasterRenderingOptionsWidget, ['rendering'], 'raster')
+        self.mPages.append(self.mRasterRenderingOptionsWidget)
+        self.mVectorRenderingOptionsWidget = QgsVectorRenderingOptionsWidget(self)
+        self.addPage('矢量', '矢量渲染默认值', QgsApplication.getThemeIcon('mIconVector.svg'),
+                     self.mVectorRenderingOptionsWidget, ['rendering'], 'vector')
+        self.mPages.append(self.mVectorRenderingOptionsWidget)
+        # Native pagePositionHint(): the elevation page sits before Colors, the
+        # advanced settings tree is appended at the end.
+        self.mElevationOptionsWidget = QgsElevationOptionsWidget(self)
+        self.insertPage('高程', '高程剖面默认值', QgsApplication.getThemeIcon('propertyicons/elevationscale.svg'),
+                        self.mElevationOptionsWidget, 'mOptionsPageColors', [], 'elevation')
+        self.mPages.append(self.mElevationOptionsWidget)
+        self.mAdvancedOptionsWidget = QgsAdvancedSettingsWidget(self)
+        self.addPage('高级', '直接编辑设置项', QgsApplication.getThemeIcon('/mIconWarning.svg'),
+                     self.mAdvancedOptionsWidget, [], 'advanced')
+        self.mPages.append(self.mAdvancedOptionsWidget)
+        # Native pagePositionHint(): the user profiles page sits before CRS.
+        self.mUserProfileOptionsWidget = QgsUserProfileOptionsWidget(self, app)
+        self.insertPage('用户配置', '启动时加载的配置档案', QgsApplication.getThemeIcon('/user.svg'),
+                        self.mUserProfileOptionsWidget, 'mOptionsPageCRS', [], 'profiles')
+        self.mPages.append(self.mUserProfileOptionsWidget)
+        # Native pagePositionHint(): the fonts page sits before Layout.
+        self.mFontOptionsWidget = QgsFontOptionsWidget(self)
+        self.insertPage('字体', '字体替换、用户字体与缺失字体下载', QgsApplication.getThemeIcon('/mIconFonts.svg'),
+                        self.mFontOptionsWidget, 'mOptionsPageComposer', [], 'fonts')
+        self.mPages.append(self.mFontOptionsWidget)
+        # Native path() is {"ide"} and pagePositionHint() is consoleOptions.
+        self.mCodeEditorOptionsWidget = QgsCodeEditorOptionsWidget(self)
+        self.insertPage('代码编辑器', '配色方案、颜色角色与等宽字体', QgsApplication.getThemeIcon('/mIconCodeEditor.svg'),
+                        self.mCodeEditorOptionsWidget, 'consoleOptions', ['ide'], 'code_editor')
+        self.mPages.append(self.mCodeEditorOptionsWidget)
         for factory in app.mQgisInterface.mOptionsFactories:
             page = factory.createWidget(self)
             if page is None: continue
@@ -432,10 +475,83 @@ class QgsOptions(QgsOptionsDialogBase):
         self.enable('mCustomizeBearingFormatButton').clicked.connect(self.customizeBearingFormat)
         self.enable('mCustomizeCoordinateFormatButton').clicked.connect(self.customizeCoordinateFormat)
         self.enable('mOpenClDevicesCombo')
-        # QgsOpenClUtils is not exposed to Python, which matches a build without
-        # OpenCL support: native disables the device chooser in that case.
-        self.mOpenClDevicesCombo.addItem('不可用（此构建未提供 OpenCL 接口）', '')
-        self.mOpenClDevicesCombo.setEnabled(False)
+        self.initAcceleration()
+        self.initStyleAndThemeCombos()
+
+    def initStyleAndThemeCombos(self):
+        """Native populates these from the runtime, not from fixed lists.
+
+        QStyleFactory::keys() minus the broken adwaita styles (with a fallback to
+        the full list when that would leave nothing), and the themes actually
+        installed under resources/themes via QgsApplication::uiThemes().
+        """
+        styles = QStyleFactory.keys()
+        filtered = [name for name in styles if 'adwaita' not in name.lower()] or styles
+        self.cmbStyle.clear()
+        for name in filtered: self.cmbStyle.addItem(name, name)
+        self.cmbStyle.setCurrentIndex(max(0, self.cmbStyle.findData(
+            self.mSettings.value('qgis/style', '', type=str))))
+
+        themes = list(QgsApplication.uiThemes().keys())
+        self.cmbUITheme.clear()
+        for name in themes: self.cmbUITheme.addItem(name, name)
+        theme = self.mSettings.value('UI/UITheme', 'default', type=str)
+        if theme not in themes: theme = 'default'
+        self.cmbUITheme.setCurrentIndex(max(0, self.cmbUITheme.findData(theme)))
+        # Native marks the theme row as needing a restart.
+        self.lblUITheme.setText(self.lblUITheme.text() + ' <i>（需要重启 QGIS）</i>')
+
+    def initAcceleration(self):
+        """Native QgsOptions OpenCL block, over the ctypes OpenCL binding.
+
+        Native guards this whole block with #ifdef HAVE_OPENCL. This build does
+        link OpenCL (qgis_core.dll imports OpenCL.dll), so the page enumerates the
+        real hardware instead of claiming the feature is unavailable.
+        """
+        from . import qgsopenclutils as opencl
+        self.mOpenClDevicesCombo.clear()
+        if opencl.available():
+            for device in opencl.devices():
+                self.mOpenClDevicesCombo.addItem(opencl.deviceInfo(opencl.Name, device),
+                                                 opencl.deviceId(device))
+            self.mOpenClDevicesCombo.setEnabled(True)
+            self.mOpenClContainerWidget.setEnabled(True)
+            current = opencl.preferredDevice() or opencl.deviceId(opencl.activeDevice())
+            self.mOpenClDevicesCombo.setCurrentIndex(
+                max(0, self.mOpenClDevicesCombo.findData(current)))
+            self.mOpenClDevicesCombo.currentIndexChanged.connect(self.updateOpenClDeviceInfo)
+            self.updateOpenClDeviceInfo()
+        else:
+            self.mOpenClDevicesCombo.setEnabled(False)
+            self.mOpenClContainerWidget.setEnabled(False)
+            self.mOpenClDevicesCombo.addItem('未找到 OpenCL 设备', '')
+            self.mGPUInfoTextBrowser.setText(
+                '未在系统上找到兼容 OpenCL 的设备。<br>可能需要安装相应的库才能启用 OpenCL。<br>'
+                '详细信息请查看日志。')
+        self.mGPUEnableCheckBox.setChecked(opencl.enabled())
+        self.mGPUEnableCheckBox.toggled.connect(self.toggleOpenCl)
+
+    def updateOpenClDeviceInfo(self, *args):
+        from . import qgsopenclutils as opencl
+        self.mGPUInfoTextBrowser.setText(
+            opencl.deviceDescription(self.mOpenClDevicesCombo.currentData() or ''))
+
+    def toggleOpenCl(self, checked):
+        # Native disables the setting while probing so a driver crash cannot lock
+        # the user out of the options, then restores it once probing succeeded.
+        from . import qgsopenclutils as opencl
+        if checked:
+            status = opencl.enabled()
+            opencl.setEnabled(False)
+            if opencl.available():
+                opencl.setEnabled(status)
+                self.mOpenClContainerWidget.setEnabled(True)
+            else:
+                self.mGPUEnableCheckBox.setChecked(False)
+                self.mOpenClContainerWidget.setEnabled(False)
+        else:
+            self.mOpenClContainerWidget.setEnabled(False)
+            opencl.setEnabled(False)
 
     def importScales(self):
         path, _ = QFileDialog.getOpenFileName(self, '导入比例尺', '', '文本文件 (*.txt)')
@@ -892,6 +1008,10 @@ class QgsOptions(QgsOptionsDialogBase):
         self.mSettings.setValue('proxy/proxyExcludedUrls', [self.mNoProxyUrlListWidget.item(i).text() for i in range(self.mNoProxyUrlListWidget.count())])
         self.mSettings.setValue('cache/size', self.mCacheSize.value() * 1024)
         self.mSettings.setValue('qgis/zoom_factor', self.spinZoomFactor.value() / 100)
+        # Native QgsOptions::saveOptions OpenCL block.
+        from . import qgsopenclutils as opencl
+        opencl.setEnabled(self.mGPUEnableCheckBox.isChecked())
+        opencl.storePreferredDevice(self.mOpenClDevicesCombo.currentData() or '')
         for prefix, widget in self.mColorBindings:
             for component, value in zip(('red', 'green', 'blue', 'alpha'), widget.color().getRgb()):
                 self.mSettings.setValue('qgis/' + prefix + '_' + component, value)

@@ -67,6 +67,11 @@ class QgisApp(QMainWindow):
         self.mRootProfileFolder = rootProfileFolder
         self.mProfileName = profileName
         self.mUserProfileManager = QgsUserProfileManager(rootProfileFolder) if rootProfileFolder else None
+        if self.mUserProfileManager is not None and profileName:
+            # Native QgisApp calls setActiveUserProfile() right after building the
+            # manager. Without it QgsUserProfileManager::userProfile() stays null,
+            # which the profile options page and the profile switcher both need.
+            self.mUserProfileManager.setActiveUserProfile(profileName)
         self.runtimeErrors = []
         self.mWindows = []
         self.mLayoutDesigners = []
@@ -1990,6 +1995,8 @@ class QgisApp(QMainWindow):
         if not enabled: self.clearMapTip()
 
     def clearMapTip(self, *args):
+        # shutdown/teardown can reach this after the map tip widget is gone.
+        if sip.isdeleted(self.mpMaptip): return
         self.mpMapTipsTimer.stop()
         self.mpMaptip.clear(self.mMapCanvas)
 
@@ -2404,6 +2411,8 @@ class QgisApp(QMainWindow):
         return result
 
     def editableLayers(self, selected=False):
+        # Teardown can reach this after the project is gone.
+        if sip.isdeleted(self.mProject): return []
         layers = self.mLayerTreeView.selectedLayers() if selected else [node.layer() for node in
                                                                         self.mProject.layerTreeRoot().findLayers()]
         return [layer for layer in layers if isinstance(layer, (QgsVectorLayer,
