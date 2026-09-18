@@ -3,27 +3,40 @@ import json
 import math
 from pathlib import Path
 from qgis.PyQt import uic, sip
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import Qt, QRectF
+from qgis.PyQt.QtGui import QFont
 from qgis.PyQt.QtWidgets import (QMainWindow, QVBoxLayout, QActionGroup, QFileDialog,
                                 QMessageBox, QProgressDialog, QApplication, QDialog,
                                 QPlainTextEdit, QDialogButtonBox)
 from qgis.core import (Qgis, QgsApplication, QgsPointXY, QgsRasterLayer, QgsVectorLayer,
                        QgsRectangle, QgsCoordinateReferenceSystem, QgsCoordinateTransform,
-                       QgsSettings, QgsContrastEnhancement, QgsRasterMinMaxOrigin, QgsProviderRegistry)
-from qgis.gui import (QgsMapCanvas, QgsMessageBar, QgsMapToolPan, QgsMapToolZoom,
+                       QgsSettings, QgsContrastEnhancement, QgsRasterMinMaxOrigin, QgsProviderRegistry,
+                       QgsLayout, QgsLayoutItemPage, QgsLayoutSize, QgsLayoutItemLabel, QgsLayoutItemMap,
+                       QgsLayoutItemTextTable, QgsLayoutTableColumn, QgsLayoutTable, QgsLayoutFrame,
+                       QgsLayoutPoint, QgsLayoutExporter, QgsLayoutMultiFrame)
+from qgis.gui import (QgsMapCanvas, QgsMessageBar, QgsMapToolPan, QgsMapToolZoom, QgsDockWidget,
                       QgsRasterLayerProperties, QgsVectorLayerProperties, QgsDataSourceSelectDialog)
-from qgis.analysis import QgsGcpPoint
+from qgis.analysis import QgsGcpPoint, QgsGcpTransformerInterface
 from .qgsgcplist import QgsGCPList
 from .qgsgcplistwidget import QgsGCPListWidget
 from .qgsgcpcanvasitem import QgsGCPCanvasItem
 from .qgsgeoreftransform import QgsGeorefTransform
 from .qgsrasterchangecoords import QgsRasterChangeCoords
 from .qgsimagewarper import QgsImageWarper
+from .qgsresidualplotitem import QgsResidualPlotItem
 from .qgsgeoreftooladdpoint import QgsGeorefToolAddPoint
 from .qgsgeoreftooldeletepoint import QgsGeorefToolDeletePoint
 from .qgsgeoreftoolmovepoint import QgsGeorefToolMovePoint
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+class QgsGeorefDockWidget(QgsDockWidget):
+    """Native QgsGeorefDockWidget: named so the dock position is remembered."""
+
+    def __init__(self, title, parent=None, flags=Qt.WindowFlags()):
+        super().__init__(title, parent, flags)
+        self.setObjectName('GeorefDockWidget')
 
 
 class QgsGeoreferencerMainWindow(QMainWindow):
@@ -38,17 +51,19 @@ class QgsGeoreferencerMainWindow(QMainWindow):
         self.mDirty = self.mBusy = self.mShutdown = self.mLinking = False
         self.mPreviousMainTool = self.mCoordinateDialog = None
         self.mCanZoomLast = self.mCanZoomNext = False
+        self.mDock = None
         self.mTransform = QgsGeorefTransform()
         self.mRasterChangeCoords = None
         crs = app.mProject.crs()
         self.mSettings = dict(method=QgsGeorefTransform.Method.PolynomialOrder1,
                               crs=crs if crs.isValid() else QgsCoordinateReferenceSystem('EPSG:4326'),
                               output='', resampling='near', compression='LZW', load=True,
-                              saveGcp=False, zero=False, resolution=None, worldfile=False)
+                              saveGcp=False, zero=False, resolution=None, worldfile=False,
+                              pdfMap='', pdfReport='')
         saved = QgsSettings()
-        self.mShowIds = saved.value('Plugin-GeoReferencer/ShowId', True, type=bool)
-        self.mShowCoords = saved.value('Plugin-GeoReferencer/ShowCoords', False, type=bool)
-        self.mResidualPixels = saved.value('Plugin-GeoReferencer/ResidualPixels', True, type=bool)
+        self.mShowIds = saved.value('Plugin-GeoReferencer/Config/ShowId', False, type=bool)
+        self.mShowCoords = saved.value('Plugin-GeoReferencer/Config/ShowCoords', False, type=bool)
+        self.mResidualPixels = saved.value('Plugin-GeoReferencer/Config/ResidualUnits', 'pixels') != 'mapUnits'
         self.mCanvas = QgsMapCanvas(self)
         self.mCanvas.setProject(app.mProject)
         self.mMessageBar = QgsMessageBar(self)
@@ -72,9 +87,28 @@ class QgsGeoreferencerMainWindow(QMainWindow):
         app.mMapCanvas.extentsChanged.connect(self.extentsChangedQGisCanvas)
         app.mMapCanvas.destinationCrsChanged.connect(self.updateMarkers)
         self.mCanvas.mapToolSet.connect(self.mapToolChanged)
-        if saved.value('Plugin-GeoReferencer/geometry'): self.restoreGeometry(saved.value('Plugin-GeoReferencer/geometry'))
+        self.mDocked = saved.value('Plugin-GeoReferencer/Config/ShowDocked', False, type=bool)
+        if not self.mDocked and saved.value('Plugin-GeoReferencer/geometry'): self.restoreGeometry(saved.value('Plugin-GeoReferencer/geometry'))
         if saved.value('Plugin-GeoReferencer/state'): self.restoreState(saved.value('Plugin-GeoReferencer/state'))
         self.updateActions()
+        if self.mDocked: self.dockThisWindow(True)
+
+    def dockThisWindow(self, dock):
+        """Native QgsGeoreferencerMainWindow::dockThisWindow: reparent into a dock."""
+        if self.mDock:
+            self.setParent(self.mApp, Qt.Window)
+            self.show()
+            self.mApp.removeDockWidget(self.mDock)
+            self.mDock.setWidget(None)
+            self.mDock.deleteLater()
+            self.mDock = None
+        self.mDocked = bool(dock)
+        if dock:
+            self.mDock = QgsGeorefDockWidget('地理配准', self.mApp)
+            self.mDock.setWidget(self)
+            self.mApp.addDockWidget(Qt.BottomDockWidgetArea, self.mDock)
+            self.mDock.show()
+        QgsSettings().setValue('Plugin-GeoReferencer/Config/ShowDocked', self.mDocked)
 
     def createActions(self):
         slots = dict(mActionOpenRaster=lambda: self.openLayer(True), mActionOpenVector=lambda: self.openLayer(False),
@@ -109,8 +143,8 @@ class QgsGeoreferencerMainWindow(QMainWindow):
             toolbar = next((bar for bar in (self.toolBarFile, self.toolBarEdit, self.toolBarView, self.toolBarHistogramStretch)
                             if action in bar.actions()), None)
             note = '原版地理配准窗口 Action；连接源图层、控制点、原生变换器及画布状态。'
-            if name == 'mActionStartGeoref': note = '栅格多项式/TPS/线性/Helmert、线性世界文件和原生矢量变换；取消、输出保护及加载。栅格投影变换和 PDF 输出未完成。'
-            if name == 'mActionTransformSettings': note = '原版变换设置 UI；方法、CRS、重采样、压缩、分辨率、透明零值、世界文件、保存控制点及加载。PDF 报告/地图和栅格投影变换未完成。'
+            if name == 'mActionStartGeoref': note = '栅格线性/Helmert/一至三阶多项式/TPS/投影变换（自实现单应+可分离核重采样）、线性世界文件和原生矢量变换；取消、输出保护、PDF 地图/报告与加载。'
+            if name == 'mActionTransformSettings': note = '原版变换设置 UI；全部七种方法、CRS、五种重采样、压缩、分辨率、透明零值、世界文件、PDF 地图/报告目标、保存控制点及加载。'
             if name == 'mActionGDALScript': note = '预览、复制及保存独立 GDAL Python 脚本；栅格与 OGR 矢量、多项式/TPS、图层与子集过滤。'
             if name == 'mActionGeorefConfig': note = '原版配置 UI；控制点 ID/坐标提示与残差单位保存。停靠及 PDF 页面设置未移植。'
             self.mApp.mDynamicActions['georeferencer:' + name] = dict(action=action, handler=getattr(callback, '__name__', name),
@@ -200,8 +234,6 @@ class QgsGeoreferencerMainWindow(QMainWindow):
         self.mSettings['output'] = (str(Path(fileName).with_name(Path(fileName).stem + '_modified' + ('.tif' if raster else '.gpkg')))
                                     if localSource else '')
         self.mSettings['worldfile'] = False
-        if raster and self.mSettings['method'] == QgsGeorefTransform.Method.Projective:
-            self.mSettings['method'] = QgsGeorefTransform.Method.PolynomialOrder1
         self.mCanvas.setDestinationCrs(layer.crs())
         self.mCanvas.setLayers([layer])
         self.mCanvas.setRenderFlag(True)
@@ -401,6 +433,7 @@ class QgsGeoreferencerMainWindow(QMainWindow):
                                                   self.mRasterChangeCoords, self.mTransform, advance)
             else: result = QgsImageWarper.warpVector(self.mLayer, output, self.mPoints, self.mSettings, context, advance)
             if self.mSettings['saveGcp']: self.saveGCPs(self.mGCPFile or self.mSourceFile+'.points')
+            self.postProcessGeoreferencedLayer(result)
             if self.mSettings['load']:
                 if raster:
                     layer = QgsRasterLayer(self.mSourceFile if self.mSettings['worldfile'] else result, Path(result).stem)
@@ -470,6 +503,220 @@ class QgsGeoreferencerMainWindow(QMainWindow):
         dialog.deleteLater()
         return True
 
+    def calculateMeanError(self):
+        """Native calculateMeanError(): residual RMS adjusted for degrees of freedom."""
+        transformer = self.mTransform.mTransformer
+        if transformer is None:
+            return None
+        enabled = [point for point in self.mPoints if point.isEnabled()]
+        minimum = transformer.minimumGcpCount()
+        if len(enabled) < minimum:
+            return None
+        residuals = [self.mResiduals[index] for index, point in enumerate(self.mPoints)
+                     if point.isEnabled() and index < len(self.mResiduals)]
+        residuals = [(x, y) for x, y in residuals if math.isfinite(x + y)]
+        if len(enabled) == minimum:
+            return 0.0
+        if len(residuals) < len(enabled):
+            return None
+        total = sum(x*x + y*y for x, y in residuals)
+        return math.sqrt(total / (len(enabled) - minimum))
+
+    def residualUnits(self):
+        """Native: map units only when the transform inverts accurately."""
+        settings = QgsSettings()
+        if settings.value('Plugin-GeoReferencer/Config/ResidualUnits', 'pixels') == 'mapUnits' \
+                and self.mTransform.providesAccurateInverseTransformation():
+            return '地图单位'
+        return '像素'
+
+    def reportFontFormats(self):
+        from qgis.core import QgsTextFormat
+        titleFont = QFont()
+        titleFont.setBold(True)
+        title = QgsTextFormat()
+        title.setFont(titleFont)
+        title.setSize(9)
+        title.setSizeUnit(Qgis.RenderUnit.Points)
+        headerFont = QFont()
+        headerFont.setPointSize(9)
+        headerFont.setBold(True)
+        contentFont = QFont()
+        contentFont.setPointSize(9)
+        return title, QgsTextFormat.fromQFont(headerFont), QgsTextFormat.fromQFont(contentFont)
+
+    def writePDFMapFile(self, fileName):
+        """Native writePDFMapFile(): paper sized to the raster with the residual plot."""
+        if self.mCanvas is None or not isinstance(self.mLayer, QgsRasterLayer):
+            return False
+        extent = self.mLayer.extent()
+        settings = QgsSettings()
+        paperWidth = float(settings.value('Plugin-GeoReferencer/Config/WidthPDFMap', '297'))
+        paperHeight = float(settings.value('Plugin-GeoReferencer/Config/HeightPDFMap', '420'))
+
+        layout = QgsLayout(self.mApp.mProject)
+        page = QgsLayoutItemPage(layout)
+        margin = 8
+        if extent.width() / extent.height() >= 1:
+            page.setPageSize(QgsLayoutSize(paperHeight, paperWidth))
+            content = (paperHeight - 2 * margin, paperWidth - 2 * margin)
+        else:
+            page.setPageSize(QgsLayoutSize(paperWidth, paperHeight))
+            content = (paperWidth - 2 * margin, paperHeight - 2 * margin)
+        layout.pageCollection().addPage(page)
+
+        layoutMap = QgsLayoutItemMap(layout)
+        layoutMap.attemptSetSceneRect(QRectF(margin, margin, content[0], content[1]))
+        layoutMap.setKeepLayerSet(True)
+        layoutMap.setLayers([self.mLayer])
+        layoutMap.setCrs(self.mLayer.crs())
+        layoutMap.zoomToExtent(extent)
+        layout.addLayoutItem(layoutMap)
+
+        plot = QgsResidualPlotItem(layout)
+        layout.addLayoutItem(plot)
+        plot.attemptSetSceneRect(QRectF(margin, margin, content[0], content[1]))
+        plot.setExtent(layoutMap.extent())
+        plot.setGCPList(self.mPoints, self.mResiduals)
+        plot.setConvertScaleToMapUnits(self.residualUnits() == '地图单位')
+
+        exporter = QgsLayoutExporter(layout)
+        exportSettings = QgsLayoutExporter.PdfExportSettings()
+        exportSettings.dpi = 300
+        return exporter.exportToPdf(fileName, exportSettings) == QgsLayoutExporter.Success
+
+    def writePDFReportFile(self, fileName):
+        """Native writePDFReportFile(): map, transformation parameters, residuals, GCPs."""
+        if self.mCanvas is None or not isinstance(self.mLayer, QgsRasterLayer):
+            return False
+        layout = QgsLayout(self.mApp.mProject)
+        for _ in range(2):
+            page = QgsLayoutItemPage(layout)
+            page.setPageSize(QgsLayoutSize(210, 297))
+            layout.pageCollection().addPage(page)
+
+        titleFormat, headerFormat, contentFormat = self.reportFontFormats()
+        settings = QgsSettings()
+        leftMargin = float(settings.value('Plugin-GeoReferencer/Config/LeftMarginPDF', '2.0'))
+        rightMargin = float(settings.value('Plugin-GeoReferencer/Config/RightMarginPDF', '2.0'))
+        contentWidth = 210 - (leftMargin + rightMargin)
+        units = self.residualUnits()
+
+        title = QgsLayoutItemLabel(layout)
+        title.setTextFormat(titleFormat)
+        title.setText(Path(self.mSourceFile).name)
+        layout.addLayoutItem(title)
+        title.attemptSetSceneRect(QRectF(leftMargin, 5, contentWidth, 8))
+        title.setFrameEnabled(False)
+
+        extent = self.mLayer.extent()
+        ratio = min(contentWidth / extent.width(), 70 / extent.height())
+        mapWidth, mapHeight = extent.width() * ratio, extent.height() * ratio
+        layoutMap = QgsLayoutItemMap(layout)
+        layoutMap.attemptSetSceneRect(QRectF(leftMargin, title.rect().bottom() + title.pos().y(), mapWidth, mapHeight))
+        layoutMap.setLayers(self.mCanvas.mapSettings().layers())
+        layoutMap.setCrs(self.mLayer.crs())
+        layoutMap.zoomToExtent(extent)
+        layout.addLayoutItem(layoutMap)
+
+        wld, origin, scaleX, scaleY, rotation = self.mTransform.getOriginScaleRotation()
+        meanError = self.calculateMeanError()
+        methodName = QgsGcpTransformerInterface.methodToString(self.mTransform.mTransformer.method()) \
+            if self.mTransform.mTransformer else ''
+        parameterLabel = QgsLayoutItemLabel(layout)
+        parameterLabel.setTextFormat(titleFormat)
+        parameterLabel.setText(('变换参数' if wld else '变换参数') + f' ({methodName})')
+        layout.addLayoutItem(parameterLabel)
+        parameterLabel.attemptSetSceneRect(
+            QRectF(leftMargin, layoutMap.rect().bottom() + layoutMap.pos().y() + 5, contentWidth, 8))
+        parameterLabel.setFrameEnabled(False)
+
+        columns = []
+        if wld:
+            columns += [QgsLayoutTableColumn('平移 x'), QgsLayoutTableColumn('平移 y'),
+                        QgsLayoutTableColumn('缩放 x'), QgsLayoutTableColumn('缩放 y'),
+                        QgsLayoutTableColumn('旋转 [度]')]
+        columns.append(QgsLayoutTableColumn(f'平均误差 [{units}]'))
+        row = []
+        if wld:
+            row += [f'{origin.x():.3f}', f'{origin.y():.3f}', str(scaleX), str(scaleY), str(math.degrees(rotation))]
+        row.append('' if meanError is None else str(meanError))
+        parameterTable = QgsLayoutItemTextTable(layout)
+        parameterTable.setHeaderTextFormat(headerFormat)
+        parameterTable.setContentTextFormat(contentFormat)
+        parameterTable.setColumns(columns)
+        parameterTable.addRow(row)
+        parameterFrame = QgsLayoutFrame(layout, parameterTable)
+        parameterFrame.attemptSetSceneRect(
+            QRectF(leftMargin, parameterLabel.rect().bottom() + parameterLabel.pos().y() + 5, contentWidth, 12))
+        parameterTable.addFrame(parameterFrame)
+        parameterTable.setGridStrokeWidth(0.1)
+
+        residualLabel = QgsLayoutItemLabel(layout)
+        residualLabel.setTextFormat(titleFormat)
+        residualLabel.setText('残差')
+        layout.addLayoutItem(residualLabel)
+        residualLabel.attemptSetSceneRect(
+            QRectF(leftMargin, parameterFrame.rect().bottom() + parameterFrame.pos().y() + 5, contentWidth, 6))
+        residualLabel.setFrameEnabled(False)
+
+        plot = QgsResidualPlotItem(layout)
+        layout.addLayoutItem(plot)
+        plot.attemptSetSceneRect(
+            QRectF(leftMargin, residualLabel.rect().bottom() + residualLabel.pos().y() + 5,
+                   contentWidth, layoutMap.rect().height()))
+        plot.setExtent(layoutMap.extent())
+        plot.setGCPList(self.mPoints, self.mResiduals)
+        plot.setConvertScaleToMapUnits(units == '地图单位')
+
+        gcpTable = QgsLayoutItemTextTable(layout)
+        gcpTable.setHeaderTextFormat(headerFormat)
+        gcpTable.setContentTextFormat(contentFormat)
+        gcpTable.setHeaderMode(QgsLayoutTable.AllFrames)
+        gcpTable.setColumns([QgsLayoutTableColumn('ID'), QgsLayoutTableColumn('启用'),
+                             QgsLayoutTableColumn('像素 X'), QgsLayoutTableColumn('像素 Y'),
+                             QgsLayoutTableColumn('地图 X'), QgsLayoutTableColumn('地图 Y'),
+                             QgsLayoutTableColumn(f'残差 X ({units})'), QgsLayoutTableColumn(f'残差 Y ({units})'),
+                             QgsLayoutTableColumn(f'残差合计 ({units})')])
+        contents = []
+        for index, point in enumerate(self.mPoints):
+            residual = self.mResiduals[index] if index < len(self.mResiduals) else (math.nan, math.nan)
+            destination = self.destinationPoint(point)
+            contents.append([str(index), '是' if point.isEnabled() else '否',
+                             f'{point.sourcePoint().x():.0f}', f'{point.sourcePoint().y():.0f}',
+                             f'{destination.x():.3f}', f'{destination.y():.3f}',
+                             str(residual[0]), str(residual[1]), str(math.hypot(*residual))])
+        gcpTable.setContents(contents)
+        firstFrameY = plot.rect().bottom() + plot.pos().y() + 5
+        firstFrame = QgsLayoutFrame(layout, gcpTable)
+        firstFrame.attemptSetSceneRect(QRectF(leftMargin, firstFrameY, contentWidth, 287 - firstFrameY))
+        gcpTable.addFrame(firstFrame)
+        secondFrame = QgsLayoutFrame(layout, gcpTable)
+        secondFrame.attemptSetSceneRect(QRectF(leftMargin, 10, contentWidth, 277.0))
+        secondFrame.attemptMove(QgsLayoutPoint(leftMargin, 10), True, False, 1)
+        secondFrame.setHidePageIfEmpty(True)
+        gcpTable.addFrame(secondFrame)
+        gcpTable.setGridStrokeWidth(0.1)
+        gcpTable.setResizeMode(QgsLayoutMultiFrame.RepeatUntilFinished)
+
+        exporter = QgsLayoutExporter(layout)
+        exportSettings = QgsLayoutExporter.PdfExportSettings()
+        exportSettings.dpi = 300
+        exportSettings.textRenderFormat = Qgis.TextRenderFormat.AlwaysText
+        return exporter.exportToPdf(fileName, exportSettings) == QgsLayoutExporter.Success
+
+    def postProcessGeoreferencedLayer(self, result):
+        """Native postProcessGeoreferencedLayer(): PDF outputs, then the success path."""
+        for key, writer in (('pdfReport', self.writePDFReportFile), ('pdfMap', self.writePDFMapFile)):
+            path = self.mSettings.get(key) or ''
+            if not path:
+                continue
+            try:
+                if not writer(path):
+                    self.mMessageBar.pushWarning('配准报告', f'未能写出 {path}')
+            except Exception as error:
+                self.mMessageBar.pushWarning('配准报告', str(error))
+
     def zoomToLayerTool(self):
         if self.mLayer:
             self.mCanvas.setExtent(self.mLayer.extent())
@@ -529,16 +776,43 @@ class QgsGeoreferencerMainWindow(QMainWindow):
         uic.loadUi(str(ROOT / 'src/ui/georeferencer/qgsgeorefconfigdialogbase.ui'), dialog)
         dialog.mShowIDsCheckBox.setChecked(self.mShowIds)
         dialog.mShowCoordsCheckBox.setChecked(self.mShowCoords)
+        dialog.mShowDockedCheckBox.setChecked(bool(self.mDock))
         dialog.mPixelsButton.setChecked(self.mResidualPixels)
         dialog.mMapUnitsButton.setChecked(not self.mResidualPixels)
-        for widget in (dialog.mShowDockedCheckBox, dialog.groupBox, dialog.mPdfReportGroupBox):
-            widget.setEnabled(False)
-            widget.setToolTip('此分支尚未移植')
+        settings = QgsSettings()
+        dialog.mLeftMarginSpinBox.setValue(float(settings.value('Plugin-GeoReferencer/Config/LeftMarginPDF', '2.0')))
+        dialog.mRightMarginSpinBox.setValue(float(settings.value('Plugin-GeoReferencer/Config/RightMarginPDF', '2.0')))
+        sizes = [('A5 (148x210 mm)', 148, 210), ('A4 (210x297 mm)', 210, 297), ('A3 (297x420 mm)', 297, 420),
+                 ('A2 (420x594 mm)', 420, 594), ('A1 (594x841 mm)', 594, 841), ('A0 (841x1189 mm)', 841, 1189),
+                 ('B5 (176x250 mm)', 176, 250), ('B4 (250x353 mm)', 250, 353), ('B3 (353x500 mm)', 353, 500),
+                 ('B2 (500x707 mm)', 500, 707), ('B1 (707x1000 mm)', 707, 1000), ('B0 (1000x1414 mm)', 1000, 1414),
+                 ('Legal (8.5x14 in)', 215.9, 355.6), ('ANSI A (Letter 8.5x11 in)', 215.9, 279.4),
+                 ('ANSI B (Tabloid 11x17 in)', 279.4, 431.8), ('ANSI C (17x22 in)', 431.8, 558.8),
+                 ('ANSI D (22x34 in)', 558.8, 863.6), ('ANSI E (34x44 in)', 863.6, 1117.6),
+                 ('Arch A (9x12 in)', 228.6, 304.8), ('Arch B (12x18 in)', 304.8, 457.2),
+                 ('Arch C (18x24 in)', 457.2, 609.6), ('Arch D (24x36 in)', 609.6, 914.4),
+                 ('Arch E (36x48 in)', 914.4, 1219.2), ('Arch E1 (30x42 in)', 762, 1066.8)]
+        current = (float(settings.value('Plugin-GeoReferencer/Config/WidthPDFMap', '297')),
+                   float(settings.value('Plugin-GeoReferencer/Config/HeightPDFMap', '420')))
+        dialog.mPaperSizeComboBox.clear()
+        for label, width, height in sizes:
+            dialog.mPaperSizeComboBox.addItem(label, (width, height))
+        index = next((row for row, (_, width, height) in enumerate(sizes)
+                      if math.isclose(width, current[0], abs_tol=0.01) and math.isclose(height, current[1], abs_tol=0.01)), 2)
+        dialog.mPaperSizeComboBox.setCurrentIndex(index)
         if dialog.exec_():
             self.mShowIds, self.mShowCoords = dialog.mShowIDsCheckBox.isChecked(), dialog.mShowCoordsCheckBox.isChecked()
             self.mResidualPixels = dialog.mPixelsButton.isChecked()
-            for key, value in [('ShowId',self.mShowIds), ('ShowCoords',self.mShowCoords), ('ResidualPixels',self.mResidualPixels)]:
-                QgsSettings().setValue('Plugin-GeoReferencer/'+key, value)
+            for key, value in [('ShowId',self.mShowIds), ('ShowCoords',self.mShowCoords),
+                               ('ResidualUnits', 'pixels' if self.mResidualPixels else 'mapUnits'),
+                               ('ShowDocked', dialog.mShowDockedCheckBox.isChecked()),
+                               ('LeftMarginPDF', dialog.mLeftMarginSpinBox.value()),
+                               ('RightMarginPDF', dialog.mRightMarginSpinBox.value()),
+                               ('WidthPDFMap', dialog.mPaperSizeComboBox.currentData()[0]),
+                               ('HeightPDFMap', dialog.mPaperSizeComboBox.currentData()[1])]:
+                QgsSettings().setValue('Plugin-GeoReferencer/Config/'+key, value)
+            dock = dialog.mShowDockedCheckBox.isChecked()
+            if dock != bool(self.mDock): self.dockThisWindow(dock)
             self.pointsChanged(False)
         dialog.deleteLater()
 
@@ -566,8 +840,9 @@ class QgsGeoreferencerMainWindow(QMainWindow):
     def closeEvent(self, event):
         if not self.mShutdown and not self.canClose(): event.ignore(); return
         self.restoreMainTool()
-        QgsSettings().setValue('Plugin-GeoReferencer/geometry', self.saveGeometry())
-        QgsSettings().setValue('Plugin-GeoReferencer/state', self.saveState())
+        if not self.mDock:
+            QgsSettings().setValue('Plugin-GeoReferencer/geometry', self.saveGeometry())
+            QgsSettings().setValue('Plugin-GeoReferencer/state', self.saveState())
         event.accept()
 
     def shutdown(self):

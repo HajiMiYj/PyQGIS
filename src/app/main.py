@@ -86,6 +86,7 @@ def main():
     parser.add_argument('--trim-extend-test', action='store_true', help='Run trim/extend snapping, geometry and undo checks')
     parser.add_argument('--customization-test', action='store_true', help='Run customization draft, INI, capture and startup checks')
     parser.add_argument('--mesh-edit-test', action='store_true', help='Run mesh triangulation, edge, face preview and keyboard checks')
+    parser.add_argument('--mesh-calculator-test', action='store_true', help='Run mesh calculator UI, time and output checks')
     parser.add_argument('--dwg-import-test', action='store_true', help='Run CAD import, preview, grouping and cancellation checks')
     parser.add_argument('--georeferencer-test', action='store_true', help='Run georeferencer actions, GCP IO, raster and vector output checks')
     parser.add_argument('--statusbar-test', action='store_true', help='Run native status bar layout and interaction checks')
@@ -102,7 +103,7 @@ def main():
     if args.customizationfile:
         args.customizationfile = str(Path(args.customizationfile).resolve())
         if not Path(args.customizationfile).is_file(): parser.error('Customization INI file does not exist')
-    if args.customization_test or args.mesh_edit_test or args.dwg_import_test or args.georeferencer_test or args.statusbar_test or args.layertree_test or args.startup_test or args.profile_test: args.smoke_test = True
+    if args.customization_test or args.mesh_edit_test or args.mesh_calculator_test or args.dwg_import_test or args.georeferencer_test or args.statusbar_test or args.layertree_test or args.startup_test or args.profile_test: args.smoke_test = True
     args.smoke_test = args.smoke_test or args.labeling_test or args.annotation_test or args.data_actions_test or args.toolbar_test or args.shape_test or args.remaining_actions_test or args.view_actions_test or args.decoration_test or args.partial_actions_test or args.trim_extend_test
     def stage(name):
         if args.smoke_test:
@@ -268,6 +269,8 @@ def main():
                 from tests.src.python.test_qgisapp_dwgimport import run
             elif args.mesh_edit_test:
                 from tests.src.python.test_qgisapp_meshediting import run
+            elif args.mesh_calculator_test:
+                from tests.src.python.test_qgisapp_meshcalculator import run
             elif args.customization_test:
                 from tests.src.python.test_qgscustomization import run
             elif args.trim_extend_test:
@@ -305,6 +308,7 @@ def main():
                 if args.trim_extend_test: reportName = 'trim-extend-test.json'
                 if args.customization_test: reportName = 'customization-test.json'
                 if args.mesh_edit_test: reportName = 'mesh-edit-test.json'
+                if args.mesh_calculator_test: reportName = 'mesh-calculator-test.json'
                 if args.dwg_import_test: reportName = 'dwg-import-test.json'
                 if args.georeferencer_test: reportName = 'georeferencer-test.json'
                 if args.statusbar_test: reportName = 'statusbar-test.json'

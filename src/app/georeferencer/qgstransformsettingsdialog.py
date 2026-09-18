@@ -1,7 +1,7 @@
 from pathlib import Path
 from qgis.PyQt import uic
 from qgis.PyQt.QtWidgets import QDialog, QMessageBox
-from qgis.core import QgsCoordinateReferenceSystem
+from qgis.core import QgsCoordinateReferenceSystem, QgsSettings
 from qgis.gui import QgsFileWidget
 from .qgsgeoreftransform import QgsGeorefTransform
 
@@ -18,9 +18,6 @@ class QgsTransformSettingsDialog(QDialog):
                              ('三阶多项式', method.PolynomialOrder3), ('薄板样条 TPS', method.ThinPlateSpline),
                              ('投影变换', method.Projective)]:
             self.cmbTransformType.addItem(label, value)
-        if raster:
-            self.cmbTransformType.model().item(6).setEnabled(False)
-            self.cmbTransformType.setToolTip('栅格投影变换的自定义重采样回调尚未移植；其他列出的栅格变换可用。')
         self.cmbTransformType.setCurrentIndex(max(0, self.cmbTransformType.findData(settings['method'])))
         for label, value in [('最近邻', 'near'), ('双线性', 'bilinear'), ('三次卷积', 'cubic'), ('三次样条', 'cubicspline'), ('Lanczos', 'lanczos')]:
             self.cmbResampling.addItem(label, value)
@@ -44,9 +41,31 @@ class QgsTransformSettingsDialog(QDialog):
         self.mWorldFileCheckBox.setChecked(settings['worldfile'])
         self.cmbTransformType.currentIndexChanged.connect(self.updateWorldFile)
         self.mWorldFileCheckBox.toggled.connect(self.updateWorldFile)
-        self.groupBox_3.setEnabled(False)
-        self.groupBox_3.setToolTip('PDF 地图与完整配准报告尚未移植。')
+        # Native QgsTransformSettingsDialog: PDF map and PDF report targets, with
+        # the last used folder remembered.
+        lastPdfFolder = QgsSettings().value('Plugin-GeoReferencer/Config/LastPdfFolder', str(Path.home()))
+        for widget, title, key in ((self.mPdfMap, 'PDF 地图另存为', 'pdfMap'),
+                                   (self.mPdfReport, 'PDF 报告另存为', 'pdfReport')):
+            widget.setStorageMode(QgsFileWidget.SaveFile)
+            widget.setFilter('PDF 文件 (*.pdf *.PDF)')
+            widget.setDialogTitle(title)
+            widget.setDefaultRoot(lastPdfFolder)
+            widget.setFilePath(settings.get(key, ''))
+            widget.fileChanged.connect(lambda path: QgsSettings().setValue(
+                'Plugin-GeoReferencer/Config/LastPdfFolder', str(Path(path).parent)))
         self.updateWorldFile()
+
+    def pdfMapFilename(self):
+        return self.mPdfMap.filePath()
+
+    def pdfReportFilename(self):
+        return self.mPdfReport.filePath()
+
+    def setPdfMapFilename(self, filename):
+        self.mPdfMap.setFilePath(filename)
+
+    def setPdfReportFilename(self, filename):
+        self.mPdfReport.setFilePath(filename)
 
     def updateWorldFile(self, *unused):
         enabled = self.mRaster and self.cmbTransformType.currentData() == QgsGeorefTransform.Method.Linear
@@ -68,5 +87,6 @@ class QgsTransformSettingsDialog(QDialog):
         self.mSettings.update(method=self.cmbTransformType.currentData(), crs=QgsCoordinateReferenceSystem(self.mCrsSelector.crs()),
                               output=output, resampling=self.cmbResampling.currentData(), compression=self.cmbCompressionComboBox.currentText(),
                               load=self.cbxLoadInProjectsWhenDone.isChecked(), saveGcp=self.saveGcpCheckBox.isChecked(),
-                              zero=self.cbxZeroAsTrans.isChecked(), resolution=resolution, worldfile=self.mWorldFileCheckBox.isChecked())
+                              zero=self.cbxZeroAsTrans.isChecked(), resolution=resolution, worldfile=self.mWorldFileCheckBox.isChecked(),
+                              pdfMap=self.pdfMapFilename(), pdfReport=self.pdfReportFilename())
         super().accept()

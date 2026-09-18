@@ -41,8 +41,36 @@ class QgsGeorefTransform:
         if not ok or not math.isfinite(x) or not math.isfinite(y): raise ValueError('坐标变换失败')
         return QgsPointXY(x, y)
 
+    def providesAccurateInverseTransformation(self):
+        """Native QgsGeorefTransform::providesAccurateInverseTransformation()."""
+        if self.mTransformer is None: return False
+        method = self.Method
+        return self.mTransformer.method() in (method.Linear, method.Helmert, method.PolynomialOrder1)
+
     def geoTransform(self):
         origin = self.transform(QgsPointXY(0, 0))
         x = self.transform(QgsPointXY(1, 0))
         y = self.transform(QgsPointXY(0, -1))
         return (origin.x(), x.x()-origin.x(), y.x()-origin.x(), origin.y(), x.y()-origin.y(), y.y()-origin.y())
+
+    def getOriginScaleRotation(self):
+        """Native getOriginScaleRotation(): origin, scales and radians for Linear/Helmert.
+
+        Only the two world-file capable methods report parameters, matching
+        QgsLinearGeorefTransform::getOriginScale() and
+        QgsHelmertGeorefTransform::getOriginScaleRotation().
+        """
+        method = self.Method
+        if self.mTransformer is None or self.mTransformer.method() not in (method.Linear, method.Helmert):
+            return False, QgsPointXY(), 0.0, 0.0, 0.0
+        origin = self.transform(QgsPointXY(0, 0))
+        xAxis = self.transform(QgsPointXY(1, 0))
+        yAxis = self.transform(QgsPointXY(0, -1))
+        scaleX = math.hypot(xAxis.x()-origin.x(), xAxis.y()-origin.y())
+        scaleY = math.hypot(yAxis.x()-origin.x(), yAxis.y()-origin.y())
+        if self.mTransformer.method() == method.Linear:
+            return True, origin, scaleX, scaleY, 0.0
+        # Helmert is a single uniform scale plus a rotation; native reports the
+        # angle of the transformed x axis in radians.
+        rotation = math.atan2(xAxis.y()-origin.y(), xAxis.x()-origin.x())
+        return True, origin, scaleX, scaleX, rotation

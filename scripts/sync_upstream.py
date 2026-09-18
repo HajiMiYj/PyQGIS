@@ -10,6 +10,10 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = Path(os.environ.get('QGIS_SOURCE_ROOT', r'C:\QGIS_COMPILE\QGIS-final-3_34_10'))
 
+# Actions deliberately outside the port, reported as excluded rather than as
+# pending work: the 3D map views, which the project scope excludes with GPS.
+OUT_OF_SCOPE_ACTIONS = {'mActionNew3DMapCanvas', 'mActionManage3DMapViews'}
+
 
 def main():
     uiPath = SOURCE / 'src/ui/qgisapp.ui'
@@ -20,6 +24,10 @@ def main():
     cpp = cppPath.read_text(encoding='utf-8')
     slots = dict(re.findall(r'connect\(\s*(mAction\w+),\s*&QAction::\w+,\s*this,\s*&QgisApp::(\w+)', cpp))
     excluded = {e.get('name') for e in root.iter() if re.search('gps|gpx', e.get('name', ''), re.I)}
+    # 3D map views are out of scope by decision, exactly like GPS; keeping them
+    # here means regenerating the manifest does not turn them into pending work.
+    excluded |= {name for name in
+                 (e.get('name') for e in root.iter()) if name in OUT_OF_SCOPE_ACTIONS}
     for e in root.findall('.//action'):
         name = e.get('name')
         actions.append({'objectName': name, 'text': e.findtext("property[@name='text']/string", ''),

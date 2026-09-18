@@ -38,11 +38,11 @@ class QgsDwgImportDialog(QDialog):
         self.mBlockModeComboBox.addItem('展开块几何', self.BlockImportExpandGeometry)
         self.mBlockModeComboBox.addItem('展开块几何并添加插入点', 3)
         self.mBlockModeComboBox.addItem('仅添加块插入点', self.BlockImportAddInsertPoints)
-        self.cbUseCurves.setChecked(False)
-        self.cbUseCurves.setEnabled(False)
-        self.cbUseCurves.setToolTip('当前 GDAL 读取后端不能保证保留原版 CAD 曲线，暂不开放此选项。')
+        self.cbUseCurves.setToolTip('圆弧、圆与带凸度的多段线保留为真曲线（CIRCULARSTRING/COMPOUNDCURVE），'
+                                    '而不是被驱动抽成折线；仅对 DXF 有效。')
         self.lblMessage.setWordWrap(True)
-        self.lblMessage.setText('DXF/DWG 版本支持取决于已安装的 CAD 驱动；曲线、复杂块及特殊文字排版仍有差异。目标包须使用新文件名。')
+        self.lblMessage.setText('DXF/DWG 版本支持取决于已安装的 CAD 驱动（DWG 经 GDAL CAD 驱动，版本范围有限）；'
+                                '椭圆与样条和原版一样按折线导入。目标包须使用新文件名。')
         self.mPanTool = QgsMapToolPan(self.mMapCanvas)
         self.mMapCanvas.setMapTool(self.mPanTool)
         self.mMapCanvas.setProject(self.mProject)
@@ -57,6 +57,8 @@ class QgsDwgImportDialog(QDialog):
         self.mDatabaseFileWidget.setFilePath(settings.value('DwgImport/lastDatabaseFile', ''))
         self.cbMergeLayers.setChecked(settings.value('DwgImport/lastMergeLayers', False, type=bool))
         self.mBlockModeComboBox.setCurrentIndex(max(0, self.mBlockModeComboBox.findData(settings.value('DwgImport/lastBlockImportFlags', 1, type=int))))
+        # Native keeps curves by default (/DwgImport/lastUseCurves defaults to true).
+        self.cbUseCurves.setChecked(settings.value('DwgImport/lastUseCurves', True, type=bool))
         self.mDatabaseFileWidget.fileChanged.connect(self.mDatabaseFileWidget_textChanged)
         self.mSourceDrawingFileWidget.fileChanged.connect(self.drawingFileWidgetFileChanged)
         self.mCrsSelector.crsChanged.connect(self.updateUI)
@@ -80,12 +82,16 @@ class QgsDwgImportDialog(QDialog):
             ('lastCrs', self.mCrsSelector.crs().srsid()),
             ('lastMergeLayers', self.cbMergeLayers.isChecked()),
             ('lastBlockImportFlags', self.mBlockModeComboBox.currentData()),
+            ('lastUseCurves', self.cbUseCurves.isChecked()),
         ): settings.setValue('DwgImport/' + key, value)
 
     def updateBlockMode(self):
         dxf = Path(self.mSourceDrawingFileWidget.filePath()).suffix.lower() == '.dxf'
         self.mBlockModeComboBox.setEnabled(dxf and not self.mBusy)
         if not dxf: self.mBlockModeComboBox.setCurrentIndex(0)
+        # Binary DWG carries no DXF entity records, so curves can only be kept
+        # for DXF; the importer reports the same reason if it is forced.
+        self.cbUseCurves.setEnabled(dxf and not self.mBusy)
 
     def updateUI(self, *unused):
         source = Path(self.mSourceDrawingFileWidget.filePath())
@@ -133,7 +139,8 @@ class QgsDwgImportDialog(QDialog):
             flags = self.mBlockModeComboBox.currentData()
             importer = QgsDwgImporter(self.mDatabaseFileWidget.filePath(), self.mCrsSelector.crs())
             counts = importer.importDrawing(self.mSourceDrawingFileWidget.filePath(),
-                                            bool(flags & self.BlockImportExpandGeometry), False,
+                                            bool(flags & self.BlockImportExpandGeometry),
+                                            self.cbUseCurves.isChecked(),
                                             bool(flags & self.BlockImportAddInsertPoints), advance)
             self.mLastImport = {'driver': importer.mDriver, 'counts': counts, 'warnings': importer.mWarnings}
             self.bar.pushSuccess('CAD', f'已导入 {sum(counts.values())} 个几何。')

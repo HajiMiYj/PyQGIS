@@ -11,6 +11,12 @@ from qgis.core import (Qgis, QgsProject, QgsApplication, QgsSettings, QgsMeshCal
 from qgis.gui import QgsGui, QgsFileWidget, QgsHelp
 from src.gui.mesh.qgsmeshdatasetgrouptreeview import QgsMeshDatasetGroupListModel
 
+# QgsMeshLayer::datasetRelativeTimeInMilliseconds() reports datasets without a
+# usable time as native INVALID_MESHLAYER_TIME; MDAL additionally returns its own
+# negative sentinel (observed -99999). Native only guards the first form, which
+# leaves a duplicate entry in the combos, so skip both.
+INVALID_MESHLAYER_TIME = 9223372036854775807
+
 
 class QgsMeshCalculatorDialog(QDialog):
     def __init__(self, meshLayer, parent=None):
@@ -32,7 +38,9 @@ class QgsMeshCalculatorDialog(QDialog):
                     self.mOutputFormatComboBox.addItem(driver.description(), driver.name())
         self.cboLayerMask.setFilters(Qgis.LayerFilter.PolygonLayer)
         self.cboLayerMask.layerChanged.connect(self.updateInfoMessage)
+        self.cboLayerMask.layerChanged.connect(self.updateMaskAvailability)
         self.mOutputDatasetFileWidget.setStorageMode(QgsFileWidget.SaveFile)
+        self.mOutputDatasetFileWidget.setDialogTitle('输入网格数据集文件')
         self.mOutputDatasetFileWidget.setDefaultRoot(QgsSettings().value('MeshCalculator/lastOutputDir', str(Path.home())))
         self.mDatasetsListWidget.doubleClicked.connect(self.datasetGroupEntry)
         self.mCurrentLayerExtentButton.clicked.connect(self.useFullLayerExtent)
@@ -64,48 +72,106 @@ class QgsMeshCalculatorDialog(QDialog):
         self.onOutputFormatChange()
         self.onVirtualCheckboxChange()
         self.toggleExtendMask()
+        # Native leaves the mask page hidden and the mask switch unavailable
+        # until a polygon layer exists, and keeps OK disabled before any input.
+        self.maskBox.setVisible(False)
+        self.useMaskCb.setEnabled(bool(self.cboLayerMask.count()))
+        self.mButtonBox.button(QDialogButtonBox.Ok).setEnabled(False)
+
+    def updateMaskAvailability(self, *args):
+        self.useMaskCb.setEnabled(bool(self.cboLayerMask.count()))
 
     def formulaString(self): return self.mExpressionTextEdit.toPlainText()
     def meshLayer(self): return self.mLayer
     def driver(self): return self.mOutputFormatComboBox.currentData()
-    def groupName(self): return self.mOutputGroupNameLineEdit.text().strip()
-    def startTime(self): return float(self.mStartTimeComboBox.currentData() or 0)
-    def endTime(self): return float(self.mEndTimeComboBox.currentData() or 0)
+    def groupName(self): return self.mOutputGroupNameLineEdit.text()
+    def startTime(self):
+        index = self.mStartTimeComboBox.currentIndex()
+        return float(self.mStartTimeComboBox.itemData(index)) if index > -1 else 0.0
+    def endTime(self):
+        index = self.mEndTimeComboBox.currentIndex()
+        return float(self.mEndTimeComboBox.itemData(index)) if index > -1 else 0.0
     def outputExtent(self): return QgsRectangle(self.mXMinSpinBox.value(), self.mYMinSpinBox.value(), self.mXMaxSpinBox.value(), self.mYMaxSpinBox.value())
+    def datasetGroupName(self, index):
+        return index.data(Qt.DisplayRole) if index.isValid() else ''
+    def currentDatasetGroup(self):
+        return self.datasetGroupName(self.mDatasetsListWidget.currentIndex())
     def currentOutputSuffix(self):
         driver = self.mMeshDrivers.get(self.driver())
         return driver.writeDatasetOnFileSuffix() if driver else ''
+    def controlSuffix(self, fileName):
+        """Native controlSuffix(): only replace a suffix that is wrong.
+
+        Native assumes the path already carries a suffix; for an extension-less
+        path it truncates the name away entirely, so keep that degenerate case
+        by appending instead of replacing.
+        """
+        if not fileName:
+            return fileName
+        appropriate, existing = self.currentOutputSuffix(), Path(fileName).suffix.lstrip('.')
+        if (existing or appropriate) and existing != appropriate:
+            prefix = fileName[:fileName.rfind('.') + 1] if existing else fileName + '.'
+            return prefix + appropriate
+        return fileName
     def outputFile(self):
-        path, suffix = self.mOutputDatasetFileWidget.filePath(), self.currentOutputSuffix()
-        return str(Path(path).with_suffix('.' + suffix)) if path and suffix else path
+        return self.controlSuffix(self.mOutputDatasetFileWidget.filePath())
 
     def datasetGroupEntry(self, index):
         self.mExpressionTextEdit.insertPlainText(' "' + index.data().replace('"', '\\"') + '" ')
 
     def useFullLayerExtent(self):
+        # Native guards a null layer: the dialog opens from the menu even when the
+        # project has no mesh layer at all.
+        if self.mLayer is None:
+            return
         extent = self.mLayer.extent()
         for widget, value in [(self.mXMinSpinBox, extent.xMinimum()), (self.mYMinSpinBox, extent.yMinimum()),
                               (self.mXMaxSpinBox, extent.xMaximum()), (self.mYMaxSpinBox, extent.yMaximum())]: widget.setValue(value)
 
     def repopulateTimeCombos(self):
-        times = set()
-        for group in self.mLayer.datasetGroupsIndexes():
-            for dataset in range(self.mLayer.datasetCount(QgsMeshDatasetIndex(group, 0))):
-                times.add(self.mLayer.datasetMetadata(QgsMeshDatasetIndex(group, dataset)).time())
+        """Native repopulateTimeCombos(): key on relative milliseconds, skip invalid."""
+        layer = self.mLayer
+        if layer is None:
+            return
+        times = {}
+        for group in layer.datasetGroupsIndexes():
+            for dataset in range(layer.datasetCount(QgsMeshDatasetIndex(group, 0))):
+                index = QgsMeshDatasetIndex(group, dataset)
+                milliseconds = layer.datasetRelativeTimeInMilliseconds(index)
+                if milliseconds == INVALID_MESHLAYER_TIME or milliseconds < 0: continue
+                times[milliseconds] = layer.datasetMetadata(index).time()
         for combo in (self.mStartTimeComboBox, self.mEndTimeComboBox):
+            combo.blockSignals(True)
             combo.clear()
-            for time in sorted(times): combo.addItem(self.mLayer.formatTime(time), time)
-        self.mEndTimeComboBox.setCurrentIndex(self.mEndTimeComboBox.count() - 1)
+        for milliseconds in sorted(times):
+            for combo in (self.mStartTimeComboBox, self.mEndTimeComboBox):
+                combo.addItem(self.mLayer.formatTime(times[milliseconds]), times[milliseconds])
+        for combo in (self.mStartTimeComboBox, self.mEndTimeComboBox):
+            combo.blockSignals(False)
+        if times:
+            self.mStartTimeComboBox.setCurrentIndex(0)
+            self.mEndTimeComboBox.setCurrentIndex(len(times) - 1)
 
     def useAllTimesFromLayer(self):
+        self.setTimesByDatasetGroupName(self.currentDatasetGroup())
+
+    def setTimesByDatasetGroupName(self, group):
+        """Native setTimesByDatasetGroupName(), resolved through the dataset group index."""
+        if self.mLayer is None: return
         index = self.mDatasetsListWidget.currentIndex()
-        if not index.isValid(): return
-        group = index.data(Qt.UserRole)
-        times = [self.mLayer.datasetMetadata(QgsMeshDatasetIndex(group, dataset)).time()
-                 for dataset in range(self.mLayer.datasetCount(QgsMeshDatasetIndex(group, 0)))]
-        if times:
-            self.mStartTimeComboBox.setCurrentIndex(self.mStartTimeComboBox.findData(min(times)))
-            self.mEndTimeComboBox.setCurrentIndex(self.mEndTimeComboBox.findData(max(times)))
+        groupIndex = index.data(Qt.UserRole) if index.isValid() else None
+        if groupIndex is None and group:
+            for candidate in self.mLayer.datasetGroupsIndexes():
+                if self.mLayer.datasetGroupMetadata(QgsMeshDatasetIndex(candidate, 0)).name() == group:
+                    groupIndex = candidate
+                    break
+        if groupIndex is None: return
+        count = self.mLayer.datasetCount(QgsMeshDatasetIndex(groupIndex, 0))
+        if count < 1: return
+        start = self.mStartTimeComboBox.findData(self.mLayer.datasetMetadata(QgsMeshDatasetIndex(groupIndex, 0)).time())
+        if start >= 0: self.mStartTimeComboBox.setCurrentIndex(start)
+        end = self.mEndTimeComboBox.findData(self.mLayer.datasetMetadata(QgsMeshDatasetIndex(groupIndex, count - 1)).time())
+        if end >= 0: self.mEndTimeComboBox.setCurrentIndex(end)
 
     def toggleExtendMask(self, *args):
         self.maskBox.setVisible(self.useMaskCb.isChecked())
@@ -119,33 +185,61 @@ class QgsMeshCalculatorDialog(QDialog):
 
     def onOutputFormatChange(self, *args):
         suffix = self.currentOutputSuffix()
-        self.mOutputDatasetFileWidget.setFilter(self.mOutputFormatComboBox.currentText() + ' (*.' + suffix + ')' if suffix else 'All files (*)')
-        path = self.outputFile()
-        if path: self.mOutputDatasetFileWidget.setFilePath(path)
+        if suffix:
+            self.mOutputDatasetFileWidget.setFilter(self.mOutputFormatComboBox.currentText() + ' (*.' + suffix + ')')
+            path = self.mOutputDatasetFileWidget.filePath()
+            if path: self.mOutputDatasetFileWidget.setFilePath(self.controlSuffix(path))
+        else:
+            self.mOutputDatasetFileWidget.setFilter('所有文件 (*)')
         self.updateInfoMessage()
 
     def expressionState(self):
         # PyQGIS returns the C++ reference output as the second tuple member.
-        return QgsMeshCalculator.expressionIsValid(self.formulaString(), self.mLayer)
+        try:
+            return QgsMeshCalculator.expressionIsValid(self.formulaString(), self.mLayer)
+        except RuntimeError:
+            # The dialog can outlive its layer (project closed, layer removed);
+            # treat that as an unusable input instead of raising from a signal.
+            return QgsMeshCalculator.InputLayerError, QgsMeshDriverMetadata.CanWriteVertexDatasets
 
     def updateInfoMessage(self, *args):
+        """Native updateInfoMessage(): same checks and same precedence."""
         result, capability = self.expressionState()
-        error = ''
-        if result != QgsMeshCalculator.Success: error = '表达式无效'
-        elif not self.groupName() or self.groupName() in self.mVariableNames: error = '结果组名称为空或已存在'
-        elif self.startTime() > self.endTime(): error = '开始时间不能晚于结束时间'
-        elif self.useMaskCb.isChecked() and not self.cboLayerMask.currentLayer(): error = '请选择多边形掩膜图层'
-        elif not self.useMaskCb.isChecked() and (self.mXMinSpinBox.value() >= self.mXMaxSpinBox.value() or self.mYMinSpinBox.value() >= self.mYMaxSpinBox.value()): error = '输出范围无效'
-        elif not self.mUseVirtualProviderCheckBox.isChecked():
+        expressionValid = result == QgsMeshCalculator.Success
+        notInFile = self.mUseVirtualProviderCheckBox.isChecked()
+
+        driverValid = False
+        if expressionValid:
             driver = self.mMeshDrivers.get(self.driver())
-            if not driver or not driver.capabilities() & capability: error = '所选格式不支持结果的数据位置（面或顶点）'
-            elif not self.outputFile() or not Path(self.outputFile()).parent.is_dir(): error = '输出路径无效'
-        self.mExpressionValidLabel.setText(error or '表达式有效')
-        self.mButtonBox.button(QDialogButtonBox.Ok).setEnabled(not error)
+            driverValid = bool(driver) and bool(driver.capabilities() & capability)
+        else:
+            # Cannot judge the driver while the expression does not parse.
+            driverValid = True
+
+        output = self.outputFile()
+        filePathValid = bool(output) and Path(output).absolute().parent.is_dir()
+        groupNameValid = bool(self.groupName()) and self.groupName() not in self.mVariableNames
+
+        if expressionValid and (notInFile or (driverValid and filePathValid)) and groupNameValid:
+            self.mExpressionValidLabel.setText('表达式有效')
+            self.mButtonBox.button(QDialogButtonBox.Ok).setEnabled(True)
+        else:
+            self.mButtonBox.button(QDialogButtonBox.Ok).setEnabled(False)
+            if not expressionValid:
+                self.mExpressionValidLabel.setText('表达式无效')
+            elif not filePathValid and not notInFile:
+                self.mExpressionValidLabel.setText('输出路径无效')
+            elif not driverValid and not notInFile:
+                self.mExpressionValidLabel.setText('所选格式不能保存定义在' +
+                                                   ('面上的' if capability == QgsMeshDriverMetadata.CanWriteFaceDatasets else '顶点上的') + '数据')
+            elif not groupNameValid:
+                self.mExpressionValidLabel.setText('结果组名称为空或已存在')
+            else:
+                self.mExpressionValidLabel.setText('输入无效')
 
     def maskGeometry(self):
         layer = self.cboLayerMask.currentLayer()
-        if not layer: raise ValueError('请选择掩膜图层')
+        if not layer or self.mLayer is None: raise ValueError('请选择掩膜图层')
         transform = QgsCoordinateTransform(layer.crs(), self.mLayer.crs(), QgsProject.instance())
         geometries = []
         for feature in layer.getFeatures():

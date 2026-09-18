@@ -81,6 +81,9 @@ class QgisAppInterface(QgisInterface):
     def removeToolBarIcon(self, action): self.qgis.mPluginToolBar.removeAction(action)
     def addToolBarWidget(self, widget): return self.qgis.mPluginToolBar.addWidget(widget)
     def _pluginMenu(self, parent, name):
+        # Native plugins may pass an empty name (e.g. the topology plugin calls
+        # addPluginToVectorMenu( QString(), action )); that means the parent menu.
+        if not name: return parent
         for action in parent.actions():
             if action.menu() and action.text() == name: return action.menu()
         return parent.addMenu(name)

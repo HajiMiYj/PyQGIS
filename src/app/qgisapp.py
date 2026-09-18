@@ -170,6 +170,7 @@ class QgisApp(QMainWindow):
             if screen is not None: self.resize(screen.availableGeometry().size() * 0.8)
         QApplication.instance().aboutToQuit.connect(self.saveWindowState)
         self.updateRecentProjects()
+        self.initProjectFromTemplates()
         self.updateActionState()
         self.updateWindowTitle()
         from .qgscustomization import QgsCustomization
@@ -779,11 +780,16 @@ class QgisApp(QMainWindow):
         self.bind('mActionDxfExport', self.dxfExport,
                   note='原版 DXF 窗口、图层/字段选择、地图主题、符号模式/比例、编码/CRS、范围、二维和 MText；原生 QgsDxfExport 写文件。复杂 CAD 符号组合仍需验收。')
         self.bind('mActionDwgImport', self.dwgImport,
-                  note='原版 CAD 表单；GDAL 读取、GeoPackage、CRS/XYZ/属性、三种 DXF 块模式、图层选择/预览/分组/合并。ASCII DXF 隐藏/冻结/锁定标志、中文编码、透明色、纸面/地图单位、虚线及端点/连接样式、字体/粗斜体/下划线/删除线/对齐/旋转，以及原版包的多段线宽度与 MTEXT 行距已接入并检查。DWG 版本范围、二进制图层状态、曲线、复杂块/填充/特殊文字仍不完整。')
+                  note='原版 CAD 表单；GDAL 读取、GeoPackage、CRS/XYZ/属性、三种 DXF 块模式、图层选择/预览/分组/合并。'
+                       '曲线已自行解析实体（ARC/CIRCLE/凸度多段线→CIRCULARSTRING/COMPOUNDCURVE，按实体句柄替换驱动折线，'
+                       '默认开启如原版）；ASCII 与二进制 DXF 的隐藏/冻结/锁定标志、编码判定、中文编码、透明色、纸面/地图单位、'
+                       '虚线及端点/连接样式、字体/粗斜体/下划线/删除线/对齐/旋转、多段线宽度与 MTEXT 行距均已接入。'
+                       'DWG 经 GDAL CAD 驱动读取（优先 READ_ALL）并报告版本；受该驱动限制，DWG 仅覆盖 R2000 及部分更早版本，'
+                       'DWG 的块插入模式不可选，椭圆与样条与原版同样按折线导入。')
         self.bind('mActionNewSpatiaLiteLayer', self.newSpatialiteLayer,
                   note='原版建层窗口；数据库连接、字段、主键、几何/Z/M、CRS、空间索引与事务创建；添加至工程。已有数据库只添加，不提供整库覆盖。')
-        self.bind('mActionShowMeshCalculator', self.showMeshCalculator, 'mesh',
-                  note='原版网格计算 UI；数据集/运算符、时间、范围/多边形掩膜、MDAL 持久或虚拟结果组、进度与取消。部分驱动和复杂时间数据待验收。')
+        self.bind('mActionShowMeshCalculator', self.showMeshCalculator,
+                  note='原版网格计算 UI 与判定顺序；数据集/运算符、相对时间（含 MDAL 无效时间）、全时段、范围/多边形掩膜、MDAL 驱动后缀、虚拟或持久结果组、进度与取消。没有网格图层时也照原版打开对话框。')
         self.bind('mActionNewMeshLayer', self.newMeshLayer,
                   note='原版窗口与 MDAL createMeshData；空网格、从工程/文件复制网格框架、格式/CRS/名称与加载。不包含网格数字化工具移植。')
         self.bind('mActionSelectByForm', self.selectByForm, 'vector')
@@ -889,7 +895,9 @@ class QgisApp(QMainWindow):
                   note='按渲染边界距离和 Z 顺序悬停拾取；原生 CAD、节点与几何预览、点击移动/确认、Esc/右键取消、节点增删、方向键移动及旋转画布换算；同步属性面板和删除清理。')
         self.bind('mActionAbout', self.about)
         self.bind('mActionEmbedLayers', self.embedLayers,
-                  note='原生组嵌入、QGS/QGZ 选择树与引用保存；3.34 未导出单图层嵌入接口，该分支仍未移植。')
+                  note='原生组嵌入与单图层嵌入；QGS/QGZ 选择树、路径解析、依赖排序、引用解析与引用保存。'
+                       '单图层分支用 QgsLayerDefinition.loadLayerDefinitionLayers 复刻未导出的 '
+                       'QgsProject::createEmbeddedLayer。')
         self.bind('mActionCustomProjection', self.customProjection,
                   note='原版 CRS 表单及原生定义控件；WKT/PROJ 编辑、校验、增加/修改/批量删除、应用/取消、用户 CRS 注册表持久化。独立窗口承载，整体 Options 仍暂停。')
         self.bind('mMainAnnotationLayerProperties',
@@ -971,7 +979,7 @@ class QgisApp(QMainWindow):
         from .georeferencer.qgsgeorefmainwindow import QgsGeoreferencerMainWindow
         self.mGeoreferencer = QgsGeoreferencerMainWindow(self)
         self.bind('mActionShowGeoreferencer', self.showGeoreferencer,
-                  note='原版地理配准窗口及 24 个 Action；栅格/矢量配准与脚本、控制点、输出及画布联动。栅格投影变换、PDF 和停靠仍未完成。')
+                  note='原版地理配准窗口及 24 个 Action；栅格/矢量配准与脚本、控制点、PDF 地图与报告、停靠、输出及画布联动。')
         self.openProfileFolderAction = QAction('打开当前用户配置文件夹', self)
         self.openProfileFolderAction.setObjectName('openProfileFolderAction')
         self.openProfileFolderAction.triggered.connect(
@@ -982,9 +990,9 @@ class QgisApp(QMainWindow):
         self.newProfileAction.triggered.connect(self.newProfile)
         self.mConfigMenu.addAction(self.newProfileAction)
         self.mDynamicActions['qgisapp:newProfileAction'] = dict(action=self.newProfileAction,
-            handler='newProfile',
-            note='原版 QgsNewNameDialog 输入名称并创建用户配置，随后以该配置启动新的应用实例。',
-            inInterface=True)
+                                                                handler='newProfile',
+                                                                note='原版 QgsNewNameDialog 输入名称并创建用户配置，随后以该配置启动新的应用实例。',
+                                                                inInterface=True)
         self.mConfigMenu.addAction(self.openProfileFolderAction)
         self.mDynamicActions['qgisapp:openProfileFolderAction'] = dict(action=self.openProfileFolderAction,
                                                                        handler='openProfileFolder',
@@ -1225,6 +1233,42 @@ class QgisApp(QMainWindow):
             action=self.mMetaSearchPlugin.action_run, handler='MetaSearchPlugin.run',
             toolbar='mWebToolBar', inInterface=True,
             note='原生 OSGeo4W MetaSearch 插件；CSW 元数据目录搜索，经 addPluginToWebMenu 挂入 Web 菜单。')
+        # Native core plugin plugin_offlineediting. Its whole logic lives in the
+        # PyQGIS-visible QgsOfflineEditing, so it is reproduced in Python (the C++
+        # DLL would only add an ABI dependency for the same two actions).
+        from .offline_editing.qgsofflineeditingplugin import QgsOfflineEditingPlugin
+        self.mOfflineEditingPlugin = QgsOfflineEditingPlugin(self)
+        for key, action in self.mOfflineEditingPlugin.initGui().items():
+            self.mDynamicActions[key] = dict(
+                action=action, handler='QgsOfflineEditingPlugin.convertProject', toolbar='mDatabaseToolBar',
+                inInterface=True,
+                note='原生离线编辑核心插件；QgsOfflineEditing 转换为离线工程（GeoPackage/SpatiaLite、图层选择、'
+                     '仅所选、覆盖确认）与同步，含原生进度对话框与数据库工具栏/菜单入口。')
+        # Native core plugin plugin_topology: its rule engine (topolTest.cpp,
+        # 41 kB) has no PyQGIS equivalent, so load the shipped DLL and drive its
+        # QgisPlugin through the ported QgisInterface.
+        self.initNativePlugins()
+
+    def initNativePlugins(self):
+        from .qgsnativepluginloader import loadNativePlugin
+        self.mNativePlugins = []
+        try:
+            plugin = loadNativePlugin('topology', self.mQgisInterface)
+            if plugin is None:
+                return
+            plugin.initGui()
+        except Exception as error:
+            QgsApplication.messageLog().logMessage(
+                f'加载原生拓扑检查器插件失败：{error}', 'Python', Qgis.Warning)
+            return
+        self.mNativePlugins.append(plugin)
+        action = next((item for item in self.mVectorToolBar.actions()
+                       if item.objectName() == 'mQActionPointer'), None)
+        if action is not None:
+            self.mDynamicActions['topology:mQActionPointer'] = dict(
+                action=action, handler='Topol.showOrHide', toolbar='mVectorToolBar', inInterface=True,
+                note='原生 plugin_topology C++ 插件（经 classFactory 加载）：拓扑规则对话框、检查坞、'
+                     '错误列表与定位；规则引擎使用插件自带实现。')
 
     def excludeGpsFromToolbox(self):
         from qgis.PyQt.QtCore import QModelIndex
@@ -1236,7 +1280,7 @@ class QgisApp(QMainWindow):
                 index = model.index(row, 0, parent)
                 algorithm = tree.algorithmForIndex(index)
                 forbidden = algorithm is not None and (
-                            'gps' in algorithm.id().lower() or 'gpx' in algorithm.id().lower())
+                        'gps' in algorithm.id().lower() or 'gpx' in algorithm.id().lower())
                 tree.setRowHidden(row, parent, forbidden)
                 if model.hasChildren(index): hideRows(index)
 
@@ -1251,10 +1295,16 @@ class QgisApp(QMainWindow):
         return self.mLayerTreeView.currentLayer()
 
     def setActiveLayer(self, layer):
-        if layer is None: return False
+        if layer is None or sip.isdeleted(layer): return False
         self.mLayerTreeView.setCurrentLayer(layer)
         self.mMapCanvas.setCurrentLayer(layer)
         return True
+
+    def activateLayerWhenMapped(self, layer):
+        """Retry activation once QgsProject has created the legend node."""
+        if sip.isdeleted(layer) or self.mProject.mapLayer(layer.id()) is not layer: return
+        if self.mLayerTreeView.currentLayer() is layer: return
+        self.setActiveLayer(layer)
 
     def vectorLayer(self, layer=None):
         layer = layer or self.activeLayer()
@@ -1281,7 +1331,19 @@ class QgisApp(QMainWindow):
                 layer.undoStack().indexChanged.connect(
                     lambda index, mesh=layer: self.mMeshEditTool.onEdit() if self.activeLayer() is mesh else None)
         if layers:
-            self.setActiveLayer(layers[-1])
+            # QgsProject emits layersAdded before legendLayersAdded (which is what
+            # actually creates the tree node), so QgsLayerTreeView::setCurrentLayer()
+            # finds no node yet and silently does nothing. Without the retry the new
+            # layer never becomes active and every requirement gated action
+            # (raster/vector/mesh) stays disabled until the user clicks the layer.
+            # Layers added with addToLegend=False never get a node and stay inactive.
+            target = layers[-1]
+            self.setActiveLayer(target)
+            if self.mLayerTreeView.currentLayer() is not target:
+                QTimer.singleShot(0, lambda layer=target: self.activateLayerWhenMapped(layer))
+        # The activation above drives this through activateLayer(); refresh here as
+        # well so the action state is correct even when it cannot activate.
+        self.updateActionState()
         if len(self.mProject.mapLayers()) == len(layers) and layers:
             QTimer.singleShot(0, self.zoomToLayerExtent)
 
@@ -1339,8 +1401,6 @@ class QgisApp(QMainWindow):
             enabled = bool(layer) if requirement == 'layer' else bool(vector)
             if requirement == 'editing': enabled = bool(vector and vector.isEditable())
             if requirement == 'raster': enabled = isinstance(layer, QgsRasterLayer)
-            if requirement == 'mesh': enabled = isinstance(layer,
-                                                           QgsMeshLayer) and layer.isValid() and not layer.isEditable()
             if requirement == 'capture-technique':
                 from qgis.gui import QgsMapToolCapture
                 tool = self.mMapCanvas.mapTool()
@@ -1507,14 +1567,28 @@ class QgisApp(QMainWindow):
         if isinstance(self.activeLayer(), QgsMeshLayer): dialog.setSourceMeshLayer(self.activeLayer(), False)
         if dialog.exec_(): self.mLayerTreeView.setCurrentLayer(dialog.newLayer())
 
+    def meshLayers(self):
+        """Usable mesh layers in the project, in layer-tree order."""
+        layers = [layer for layer in self.mProject.mapLayers().values()
+                  if isinstance(layer, QgsMeshLayer) and layer.isValid()]
+        order = {node.layerId(): index for index, node in enumerate(self.mProject.layerTreeRoot().findLayers())}
+        return sorted(layers, key=lambda layer: order.get(layer.id(), len(order)))
+
     def showMeshCalculator(self):
+        # Native QgsMeshCalculatorDialog takes a possibly null mesh layer and is
+        # opened straight from the menu, so the dialog must appear even with no
+        # mesh layer loaded; only mesh edit mode is refused, as upstream does.
         layer = self.activeLayer()
         if not isinstance(layer, QgsMeshLayer) or not layer.isValid():
-            self.mMessageBar.pushWarning('网格计算器', '请先选择网格图层')
-            return
-        if layer.isEditable():
-            self.mMessageBar.pushWarning('网格计算器', '请先结束网格编辑')
-            return
+            selected = [item for item in self.mLayerTreeView.selectedLayers()
+                        if isinstance(item, QgsMeshLayer) and item.isValid()]
+            available = selected or self.meshLayers()
+            layer = available[0] if available else None
+        if layer is not None:
+            if layer.isEditable():
+                self.mMessageBar.pushWarning('网格计算器', '请先结束网格编辑')
+                return
+            if layer is not self.activeLayer(): self.setActiveLayer(layer)
         from .mesh.qgsmeshcalculatordialog import QgsMeshCalculatorDialog
         if QgsMeshCalculatorDialog(layer, self).exec_(): self.mMessageBar.pushSuccess('网格计算器',
                                                                                       '计算完成，结果组已加入当前网格图层')
@@ -1688,6 +1762,50 @@ class QgisApp(QMainWindow):
     def fileClose(self):
         return self.fileNew()
 
+    def projectTemplateDir(self):
+        return str(self.mSettings.value(
+            'qgis/projectTemplateDir',
+            str(Path(QgsApplication.qgisSettingsDirPath()) / 'project_templates'), type=str))
+
+    def updateProjectFromTemplates(self):
+        """Native QgisApp::updateProjectFromTemplates(): refresh the template menu."""
+        menu = self.mProjectFromTemplateMenu
+        menu.clear()
+        templateDir = Path(self.projectTemplateDir())
+        if templateDir.is_dir():
+            for entry in sorted(templateDir.iterdir()):
+                if entry.is_file() and entry.suffix.lower() in ('.qgs', '.qgz'):
+                    menu.addAction(entry.name)
+        # "< Blank >" loads a blank template regardless of the configured default.
+        if self.mSettings.value('qgis/newProjectDefault', False, type=bool):
+            menu.addAction('< Blank >')
+
+    def fileNewFromTemplateAction(self, action):
+        # Native QgisApp::fileNewFromTemplateAction().
+        if action is None:
+            return
+        if action.text() == '< Blank >':
+            self.fileNewBlank()
+            return
+        self.fileNewFromTemplate(str(Path(self.projectTemplateDir()) / action.text()))
+
+    def fileNewFromTemplate(self, fileName):
+        # Native QgisApp::fileNewFromTemplate().
+        if not self.saveDirty():
+            return False
+        if self.addProject(fileName):
+            # Clear the file name so saving does not overwrite the template.
+            self.mProject.setFileName('')
+            return True
+        return False
+
+    def fileNewFromDefaultTemplate(self):
+        # Native QgisApp::fileNewFromDefaultTemplate().
+        template = str(Path(QgsApplication.qgisSettingsDirPath()) / 'project_default.qgs')
+        if Path(template).exists() and self.fileNewFromTemplate(template):
+            return
+        self.mMessageBar.pushWarning('打开模板工程', f'默认模板不可用：{template}')
+
     def userProfileManager(self):
         return self.mUserProfileManager
 
@@ -1835,6 +1953,20 @@ class QgisApp(QMainWindow):
         self.mSettings.remove('PythonDesktop/recentProjects')
         self.updateRecentProjects()
 
+    def initProjectFromTemplates(self):
+        """Wire the template submenu and its refresh entry (native ctor 1263/1307)."""
+        self.mProjectFromTemplateMenu.triggered.connect(self.fileNewFromTemplateAction)
+        if not hasattr(self, 'updateProjectFromTemplatesAction'):
+            self.updateProjectFromTemplatesAction = QAction('从模板新建', self)
+            self.updateProjectFromTemplatesAction.setObjectName('updateProjectFromTemplates')
+            self.updateProjectFromTemplatesAction.triggered.connect(self.updateProjectFromTemplates)
+        self.mDynamicActions['qgisapp:updateProjectFromTemplates'] = dict(
+            action=self.updateProjectFromTemplatesAction, handler='updateProjectFromTemplates',
+            note='原版扫描 qgis/projectTemplateDir 下的 .qgs/.qgz 刷新"从模板新建"菜单；启用默认工程时追加 < Blank >；'
+                 '选中模板走 fileNewFromTemplate（清空文件名以免覆盖模板），< Blank > 走新建空白工程。',
+            inInterface=True)
+        self.updateProjectFromTemplates()
+
     def addUserInputWidget(self, widget):
         self.mUserInputDockWidget.addUserInputWidget(widget)
 
@@ -1933,6 +2065,7 @@ class QgisApp(QMainWindow):
         dialog = QgsRasterAttributeTableDialog(layer)
         dialog.setAttribute(Qt.WA_DeleteOnClose)
         dialog.show()
+
     def createRasterAttributeTable(self):
         from .qgsrasterattributetableapputils import QgsCreateRasterAttributeTableDialog
         layer = self.mLayerTreeView.currentLayer()
@@ -1942,6 +2075,7 @@ class QgisApp(QMainWindow):
         dialog.setMessageBar(self.mMessageBar)
         if dialog.exec_() == QDialog.Accepted and dialog.openWhenDone():
             self.openRasterAttributeTable()
+
     def loadRasterAttributeTableFromFile(self):
         from .qgsrasterattributetableapputils import QgsLoadRasterAttributeTableDialog
         layer = self.mLayerTreeView.currentLayer()
@@ -2709,9 +2843,6 @@ class QgisApp(QMainWindow):
         self.mAddLayerMenu.removeAction(action)
 
     def addEmbeddedItems(self, projectFile, groups, layerIds=()):
-        if layerIds:
-            self.mMessageBar.pushWarning('嵌入', '当前支持组嵌入；单图层嵌入接口尚未移植，请在源工程中将图层归组。')
-            return False
         if self.mProject.fileName() and Path(projectFile).resolve() == Path(self.mProject.fileName()).resolve():
             self.mMessageBar.pushWarning('嵌入', '不能嵌入当前工程自身')
             return False
@@ -2743,9 +2874,104 @@ class QgisApp(QMainWindow):
             else:
                 self.mMessageBar.pushWarning('嵌入', f'无法嵌入组“{name}”')
                 success = False
+
+        # Native QgisApp::addEmbeddedItems() resolves individual layers through
+        # QgsProject::createEmbeddedLayer(). That private helper is not exposed to
+        # Python, so its steps are reproduced here with public API instead of
+        # refusing the request: locate the source <maplayer>, honour the source
+        # project's path resolver, create the layer through the same low-level
+        # QgsLayerDefinition entry point native uses, then resolve references.
+        created = []
+        for layerId in self.dependencyOrderedLayerIds(projectFile, layerIds):
+            if self.mProject.mapLayer(layerId) or layerId in getattr(self, 'mEmbeddedLayerIds', set()):
+                continue
+            element = self.sourceLayerElement(document, layerId)
+            if element is None:
+                self.mMessageBar.pushWarning('嵌入', f'源工程中找不到图层 {layerId}，已跳过')
+                success = False
+                continue
+            if element.attribute('embedded') == '1':
+                # Native: a layer can be embedded only once.
+                continue
+            layers = QgsLayerDefinition.loadLayerDefinitionLayers(
+                self.layerDefinitionDocument(element),
+                self.embeddedReadWriteContext(projectFile, document))
+            if not layers:
+                self.mMessageBar.pushWarning('嵌入', f'无法嵌入图层 {layerId}')
+                success = False
+                continue
+            for layer in layers:
+                self.addMapLayer(layer)
+                node = self.mProject.layerTreeRoot().findLayer(layer.id())
+                if node is not None:
+                    node.setCustomProperty('embedded_project', str(Path(projectFile).resolve()))
+                created.append(layer)
+            self.mEmbeddedLayerIds = getattr(self, 'mEmbeddedLayerIds', set()) | {layerId}
+        if created:
+            self.mProject.setDirty(True)
         for layer in self.mProject.mapLayers().values(): layer.resolveReferences(self.mProject)
         self.mMapCanvas.refresh()
         return success
+
+    @staticmethod
+    def sourceLayerElement(document, layerId):
+        """The <maplayer> with the given <id> inside <projectlayers>."""
+        collection = document.documentElement().firstChildElement('projectlayers')
+        if collection.isNull():
+            return None
+        element = collection.firstChildElement('maplayer')
+        while not element.isNull():
+            if element.firstChildElement('id').text() == layerId:
+                return element
+            element = element.nextSiblingElement('maplayer')
+        return None
+
+    @staticmethod
+    def layerDefinitionDocument(element):
+        """Wrap a source <maplayer> as a QLR document for the layer-definition loader.
+
+        QgsLayerDefinition::loadLayerDefinitionLayersInternal() looks for
+        <projectlayers><maplayer> or <maplayers><maplayer>, so the maplayer cannot
+        sit directly under the <qlr> root.
+        """
+        from qgis.PyQt.QtXml import QDomDocument
+        document = QDomDocument()
+        root = document.createElement('qlr')
+        document.appendChild(root)
+        collection = document.createElement('maplayers')
+        root.appendChild(collection)
+        collection.appendChild(element.cloneNode(True))
+        return document
+
+    @staticmethod
+    def embeddedReadWriteContext(projectFile, document):
+        """Native createEmbeddedLayer(): resolve relative paths against the source project."""
+        from qgis.core import QgsPathResolver, QgsReadWriteContext
+        context = QgsReadWriteContext()
+        absolute = document.documentElement().firstChildElement('properties').firstChildElement('Paths') \
+            .firstChildElement('Absolute')
+        if not absolute.isNull() and absolute.text().strip().lower() != 'true':
+            context.setPathResolver(QgsPathResolver(str(Path(projectFile).resolve())))
+        context.setTransformContext(QgsProject.instance().transformContext())
+        try:
+            context.setProjectTranslator(QgsProject.instance())
+        except AttributeError:
+            pass
+        return context
+
+    @staticmethod
+    def dependencyOrderedLayerIds(projectFile, layerIds):
+        """Native addEmbeddedItems() walks the requested ids in dependency order."""
+        wanted = list(dict.fromkeys(layerIds))
+        if not wanted:
+            return wanted
+        try:
+            from qgis.core import QgsLayerDefinition
+            ordered = [layerId for layerId in QgsLayerDefinition.DependencySorter(
+                str(Path(projectFile).resolve())).sortedLayerIds() if layerId in wanted]
+        except Exception:
+            return wanted
+        return ordered + [layerId for layerId in wanted if layerId not in ordered]
 
     def saveAsLayerDefinition(self):
         path, _ = QFileDialog.getSaveFileName(self, '图层定义', '', 'QGIS 图层定义 (*.qlr)')
