@@ -201,32 +201,49 @@ def main():
         if 'fusion' in styleKeys:
             desiredStyle = 'fusion'
     from src.app.qgsproxystyle import QgsAppStyle
-    _QApp.setStyle(QgsAppStyle(desiredStyle if desiredStyle else activeStyleName))
+    appStyle = QgsAppStyle(desiredStyle if desiredStyle else activeStyleName)
+    _QApp.setStyle(appStyle)
     if desiredStyle and activeStyleName != desiredStyle:
         settings.setValue('qgis/style', desiredStyle)
-    # Native locale handling: user locale with the group-separator override.
+    # Native QgisApp::setTheme() -> QgsApplication::setUITheme(): loads the theme's
+    # style.qss (substituting its @variables), applies palette.txt and switches the
+    # icon theme. Without this the UI theme setting has no effect whatsoever.
+    QgsApplication.setUITheme(settings.value('UI/UITheme', 'default', type=str))
+    # Native main.cpp locale block: command line, then the user override, then the
+    # system locale; locale/globalLocale may override the default QLocale.
     translationCode = os.environ.get('QGIS_TRANSLATION_CODE', '')
     userTranslation = settings.value('locale/userLocale', '', type=str)
+    globalLocale = settings.value('locale/globalLocale', '', type=str)
     localeOverride = settings.value('locale/overrideFlag', False, type=bool)
-    if not translationCode:
-        translationCode = userTranslation if (localeOverride and userTranslation) else QLocale().name()
-        settings.setValue('locale/userLocale', translationCode)
     showGroupSeparator = settings.value('locale/showGroupSeparator', False, type=bool) if localeOverride else False
+    if not translationCode:
+        if not localeOverride or not userTranslation:
+            translationCode = QLocale().name()
+            settings.setValue('locale/userLocale', translationCode)
+        else:
+            translationCode = userTranslation
+    else:
+        settings.setValue('locale/userLocale', translationCode)
+    if localeOverride and globalLocale:
+        QLocale.setDefault(QLocale(globalLocale))
     currentLocale = QLocale()
     if showGroupSeparator:
         currentLocale.setNumberOptions(currentLocale.numberOptions() & ~QLocale.OmitGroupSeparator)
     else:
         currentLocale.setNumberOptions(currentLocale.numberOptions() | QLocale.OmitGroupSeparator)
     QLocale.setDefault(currentLocale)
+    # setTranslation() installs the qgis_<code>.qm and qt_<code>.qm translators.
     QgsApplication.setTranslation(translationCode)
     QgsApplication.setLocale(QLocale())
     QgsApplication.setMaxThreads(settings.value('qgis/max_threads', -1, type=int))
-    translator = QTranslator(app)
-    if translator.load(str(Path(prefix) / 'i18n/qgis_zh-Hans.qm')):
-        app.installTranslator(translator)
+    # setTranslation() above already installed qgis_<code>.qm and qt_<code>.qm via
+    # QgsApplication::installTranslators(), so no hardcoded translation is forced.
     from src.app.qgisapp import QgisApp
     window = QgisApp(customization=not args.nocustomization, customizationFile=args.customizationfile,
                      rootProfileFolder=rootProfileFolder, profileName=profileName)
+    # Qt replaces the top level style with a QStyleSheetStyle once the theme
+    # stylesheet is set, so keep the installed proxy for introspection.
+    window.mAppStyle = appStyle
     originalHook = sys.excepthook
     def exceptionHook(kind, value, tb):
         detail = ''.join(traceback.format_exception(kind, value, tb))

@@ -326,18 +326,24 @@ class QgsMapToolEditMeshFrame(QgsMapToolAdvancedDigitizing):
             self.mSelectionRubberBand.reset(Qgis.GeometryType.Point)
             if self.mTransformDockWidget: self.mTransformDockWidget.hide()
         editable = self.editor() is not None
+        # Qt deletes the owned actions during teardown while this refresh can still
+        # be queued from QgisApp.updateActionState(); skip the dead wrappers.
+        from qgis.PyQt import sip as _sip
         for key, action in self.mActions.items():
+            if _sip.isdeleted(action):
+                continue
             enabled = editable
             if 'RemoveVertices' in key or key == 'mActionTransformCoordinates': enabled = enabled and bool(self.mSelectedVertices)
             if key == 'mActionDelaunayTriangulation': enabled = enabled and len(self.mSelectedVertices) >= 3
             if key in ('mActionRemoveFaces', 'mActionSplitFaces', 'mActionFacesRefinement'): enabled = enabled and bool(self.mSelectedFaces)
             action.setEnabled(enabled)
-        if self.mActions:
-            active = self.canvas().mapTool() is self
+        canvas = self.canvas()
+        if self.mActions and canvas is not None and not any(_sip.isdeleted(a) for a in self.mActions.values()):
+            active = canvas.mapTool() is self
             self.mActionDigitizing.setChecked(active and self.mCurrentState == 'Digitizing')
             self.mActionSelectByPolygon.setChecked(active and self.mCurrentState == 'Selecting')
             self.mActionForceByLines.setChecked(active and self.mCurrentState == 'ForceByLines')
-            if active and not editable: self.canvas().setMapTool(self.mApp.mMapTools['pan'])
+            if active and not editable: canvas.setMapTool(self.mApp.mMapTools['pan'])
         if layer is not None:
             self.mApp.mActionToggleEditing.setEnabled(layer.isValid() and layer.supportsEditing())
             self.mApp.mActionToggleEditing.setChecked(editable)

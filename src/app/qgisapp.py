@@ -9,6 +9,20 @@ import traceback
 from functools import partial
 from qgis.PyQt import uic, sip
 from qgis.PyQt.QtCore import Qt, QTimer, QUrl, QSize, QEvent
+
+# Native qgisapp.h: 24 on non-macOS builds, 32 on macOS.
+QGIS_ICON_SIZE = 24
+
+
+def isDeleted(obj):
+    """sip.isdeleted() only accepts wrapped C++ objects.
+
+    Several collaborators are plain Python classes (the digitizing technique
+    manager), so a bare sip.isdeleted() on them raises TypeError instead of
+    answering the question. Plain Python objects are never 'deleted'.
+    """
+    return isinstance(obj, sip.simplewrapper) and sip.isdeleted(obj)
+
 from qgis.PyQt.QtGui import QDesktopServices, QColor, QKeySequence, QIcon
 from qgis.PyQt.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QDockWidget, QAction, QActionGroup,
@@ -184,7 +198,40 @@ class QgisApp(QMainWindow):
         enabled = False if not customization else True if customizationFile else None
         self.mCustomization = QgsCustomization(self, customizationSettings, enabled)
         self.mCustomization.updateMainWindow()
+        # Native QgisApp ctor: apply the configured toolbar icon size at startup.
+        # Without it the toolbars (and panel toolbars) keep the style default,
+        # which Qt scales with the screen DPI and looks oversized on some systems.
+        if self.mSettings.contains('qgis/toolbarIconSize'):
+            iconSize = self.mSettings.value('qgis/toolbarIconSize', QGIS_ICON_SIZE, type=int)
+            if iconSize < 16: iconSize = QGIS_ICON_SIZE
+        else:
+            iconSize = QGIS_ICON_SIZE
+            self.mSettings.setValue('qgis/toolbarIconSize', iconSize)
+        self.setIconSizes(iconSize)
         self.writeCoverage()
+
+    @staticmethod
+    def panelIconSize(size):
+        """Native QgsGuiUtils::panelIconSize(): panels use a smaller icon size."""
+        adjusted = 16
+        if size > 32: adjusted = size - 16
+        elif size == 32: adjusted = 24
+        return adjusted
+
+    def iconSize(self, dockedToolbar=False):
+        """Native QgisApp::iconSize()."""
+        size = self.mSettings.value('qgis/toolbarIconSize', QGIS_ICON_SIZE, type=int)
+        size = self.panelIconSize(size) if dockedToolbar else size
+        return QSize(size, size)
+
+    def setIconSizes(self, size):
+        """Native QgisApp::setIconSizes(): app toolbars keep the size, panels shrink."""
+        iconSize, panelSize = QSize(size, size), QSize(self.panelIconSize(size), self.panelIconSize(size))
+        self.setIconSize(iconSize)
+        for toolbar in self.findChildren(QToolBar):
+            parent = toolbar.parent()
+            className = parent.metaObject().className() if parent is not None else ''
+            toolbar.setIconSize(iconSize if className == 'QgisApp' else panelSize)
 
     def createCanvas(self):
         container = QWidget(self)
@@ -1473,9 +1520,12 @@ class QgisApp(QMainWindow):
         tool = self.mMapCanvas.mapTool()
         if tool and tool.action() and tool.action().objectName() in self.mRequirements and not tool.action().isEnabled():
             self.mMapCanvas.setMapTool(self.mMapTools['pan'])
-        if hasattr(self, 'mMapToolsDigitizingTechniqueManager'):
+        if hasattr(self, 'mMapToolsDigitizingTechniqueManager') and not isDeleted(self.mMapToolsDigitizingTechniqueManager):
             self.mMapToolsDigitizingTechniqueManager.updateActions()
-        if hasattr(self, 'mMeshEditTool'): self.mMeshEditTool.updateActions()
+        # The mesh edit tool owns QActions that Qt deletes during teardown, while
+        # this state refresh can still be queued; touching them then aborts the app.
+        if hasattr(self, 'mMeshEditTool') and not isDeleted(self.mMeshEditTool):
+            self.mMeshEditTool.updateActions()
 
     def fullHistogramStretch(self):
         self.histogramStretch(False, QgsRasterMinMaxOrigin.MinMax)

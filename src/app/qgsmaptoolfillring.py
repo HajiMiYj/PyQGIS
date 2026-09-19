@@ -1,6 +1,6 @@
 """QgsMapToolFillRing: add-and-fill, or Shift-click an existing hole, atomically."""
 from qgis.PyQt.QtCore import Qt
-from qgis.core import Qgis, QgsGeometry, QgsFeatureRequest, QgsPointXY, QgsVectorLayerUtils, QgsVectorLayer, QgsVectorDataProvider
+from qgis.core import Qgis, QgsGeometry, QgsFeatureRequest, QgsPointXY, QgsVectorLayerUtils, QgsVectorLayer, QgsVectorDataProvider, QgsCurvePolygon
 from qgis.gui import QgsMapToolCapture, QgsAttributeDialog, QgsAttributeEditorContext
 from .qgsmaptoolsplitfeatures import _GeometryEditCapture
 
@@ -69,9 +69,10 @@ class QgsMapToolFillRing(_GeometryEditCapture):
             polygons = geometry.asGeometryCollection() if geometry.isMultipart() else [geometry]
             for polygon in polygons:
                 shape = polygon.constGet()
-                if shape is None: continue
+                # A geometry collection can hold bare curves (curve capture); those
+                # have no interior rings and cannot hold a fillable ring.
+                if not isinstance(shape, QgsCurvePolygon): continue
                 for index in range(shape.numInteriorRings()):
-                    from qgis.core import QgsCurvePolygon
                     ring = QgsCurvePolygon()
                     ring.setExteriorRing(shape.interiorRing(index).clone())
                     ringGeometry = QgsGeometry(ring)

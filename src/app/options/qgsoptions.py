@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
 from qgis.PyQt import uic
-from qgis.PyQt.QtCore import Qt, QSize, QUrl
+from qgis.PyQt.QtCore import Qt, QSize, QUrl, QLocale
 from qgis.PyQt.QtGui import QStandardItem, QStandardItemModel, QColor, QDesktopServices, QFont
 from qgis.PyQt.QtWidgets import (QVBoxLayout, QToolBar, QFileDialog, QInputDialog, QListWidgetItem,
                                  QMessageBox, QStyleFactory)
@@ -279,20 +279,56 @@ class QgsOptions(QgsOptionsDialogBase):
 
     def initLocaleAndFonts(self):
         # Locale (native reads/writes QgsApplication::settingsLocaleUserLocale /
-        # GlobalLocale / ShowGroupSeparator).
-        translation = self.mSettings.value('locale/userLocale', '', type=str)
+        # GlobalLocale / ShowGroupSeparator). The language list is the set of
+        # installed qgis_*.qm files, exactly as native i18nList() builds it: the
+        # codes there (e.g. zh-Hans) differ from QLocale().name() (zh_CN), so a
+        # hardcoded list cannot select a translation that exists.
+        userLocale = self.mSettings.value('locale/userLocale', '', type=str)
         widget = self.enable('cboTranslation')
-        widget.addItem('', '')
-        for name in ('en', 'zh_CN', 'zh_TW', 'de', 'fr', 'es', 'ja', 'ru'):
-            widget.addItem(name, name)
-        widget.setCurrentIndex(max(0, widget.findData(translation)))
+        for code in self.installedTranslations():
+            display = 'sardu' if code.startswith('sc') else QLocale(code).nativeLanguageName() or code
+            # No flag icons: a language code is not a country, and rendering a
+            # region flag next to e.g. zh-Hant would assert a political claim the
+            # language itself does not carry. Show the native language name only.
+            widget.addItem(display, code)
+        # Native leaves the combo unselected when no installed translation matches
+        # (findData returns -1); picking item 0 for it would silently write a
+        # language the user never chose. Match a system locale such as zh_CN onto
+        # its installed script variant (zh-Hans) so the current language is shown.
+        index = widget.findData(userLocale)
+        if index < 0 and userLocale:
+            language = QLocale(userLocale).language()
+            script = QLocale(userLocale).script()
+            for candidate in range(widget.count()):
+                code = widget.itemData(candidate)
+                if QLocale(code).language() != language:
+                    continue
+                if script == QLocale.AnyScript or QLocale(code).script() == script:
+                    index = candidate
+                    break
+        widget.setCurrentIndex(index)
         globalLocale = self.mSettings.value('locale/globalLocale', '', type=str)
         globalWidget = self.enable('cboGlobalLocale')
-        globalWidget.addItem('', '')
-        for name in ('en_US', 'zh_CN', 'de_DE', 'fr_FR', 'es_ES'):
-            globalWidget.addItem(name, name)
-        globalWidget.setCurrentIndex(max(0, globalWidget.findData(globalLocale)))
+        seen = set()
+        for locale in QLocale.matchingLocales(QLocale.AnyLanguage, QLocale.AnyScript, QLocale.AnyCountry):
+            if locale.name() in seen: continue
+            seen.add(locale.name())
+            globalWidget.addItem(
+                f'{QLocale.languageToString(locale.language())} {QLocale.countryToString(locale.country())} '
+                f'({locale.name()})', locale.name())
+        # Native leaves this unselected too; max(0, -1) selected the "C" entry and
+        # wrote locale/globalLocale='C' for every user who never chose one.
+        globalWidget.setCurrentIndex(globalWidget.findData(globalLocale))
+        self.enable('lblSystemLocale').setText(
+            self.tr('Detected active locale on your system: %1').replace('%1', QLocale().name()))
         self.bindSetting('cbShowGroupSeparator', 'setChecked', 'locale/showGroupSeparator', False)
+        self.enable('grpLocale').setChecked(
+            self.mSettings.value('locale/overrideFlag', False, type=bool))
+        # Choosing a language is an explicit request to override the system
+        # locale, so tick the group box for the user; otherwise the choice is
+        # written but main.py ignores it and the UI stays in the system language.
+        widget.currentIndexChanged.connect(
+            lambda index: self.enable('grpLocale').setChecked(True) if index >= 0 else None)
         # Application font (native QgisAppStyleSheet /app/fontPointSize, /app/fontFamily).
         self.bindSetting('spinFontSize', 'setValue', 'app/fontPointSize',
                          float(self.font().pointSizeF()))
@@ -478,6 +514,16 @@ class QgsOptions(QgsOptionsDialogBase):
         self.initAcceleration()
         self.initStyleAndThemeCombos()
 
+    @staticmethod
+    def installedTranslations():
+        """Native QgsOptions::i18nList(): the qgis_*.qm codes in the i18n folder."""
+        folder = Path(QgsApplication.i18nPath())
+        codes = []
+        for path in sorted(folder.glob('qgis*.qm')):
+            if path.name == 'qgis_en.qm': continue
+            codes.append(path.stem[len('qgis_'):])
+        return codes
+
     def initStyleAndThemeCombos(self):
         """Native populates these from the runtime, not from fixed lists.
 
@@ -489,15 +535,17 @@ class QgsOptions(QgsOptionsDialogBase):
         filtered = [name for name in styles if 'adwaita' not in name.lower()] or styles
         self.cmbStyle.clear()
         for name in filtered: self.cmbStyle.addItem(name, name)
-        self.cmbStyle.setCurrentIndex(max(0, self.cmbStyle.findData(
-            self.mSettings.value('qgis/style', '', type=str))))
+        # Native uses findText() without a fallback: an unset qgis/style leaves the
+        # combo blank instead of silently writing the first available style.
+        self.cmbStyle.setCurrentIndex(
+            self.cmbStyle.findData(self.mSettings.value('qgis/style', '', type=str)))
 
         themes = list(QgsApplication.uiThemes().keys())
         self.cmbUITheme.clear()
         for name in themes: self.cmbUITheme.addItem(name, name)
         theme = self.mSettings.value('UI/UITheme', 'default', type=str)
         if theme not in themes: theme = 'default'
-        self.cmbUITheme.setCurrentIndex(max(0, self.cmbUITheme.findData(theme)))
+        self.cmbUITheme.setCurrentIndex(self.cmbUITheme.findData(theme))
         # Native marks the theme row as needing a restart.
         self.lblUITheme.setText(self.lblUITheme.text() + ' <i>（需要重启 QGIS）</i>')
 
@@ -995,7 +1043,11 @@ class QgsOptions(QgsOptionsDialogBase):
         super().accept()
     def apply(self): self.accept()
     def saveOptions(self):
-        for key, widget, getter in self.mBindings: self.mSettings.setValue(key, getattr(widget, getter)())
+        # An unselected combo (currentIndex -1, e.g. no style chosen) must store an
+        # empty value rather than an invalid QVariant, matching native currentText().
+        for key, widget, getter in self.mBindings:
+            value = getattr(widget, getter)()
+            self.mSettings.setValue(key, '' if value is None else value)
         for entry, widget, getter in self.mCoreBindings: entry.setValue(getattr(widget, getter)())
         for page in self.mPages: page.apply()
         QgsApplication.setNullRepresentation(self.leNullValue.text())
@@ -1041,6 +1093,9 @@ class QgsOptions(QgsOptionsDialogBase):
         from qgis.core import QgsLocalDefaultSettings
         self.mSettings.setValue('locale/userLocale', self.cboTranslation.currentData() or '')
         self.mSettings.setValue('locale/globalLocale', self.cboGlobalLocale.currentData() or '')
+        # qgsoptions.cpp:1873 - without this write main.py always falls back to
+        # the system locale and an installed translation can never take effect.
+        self.mSettings.setValue('locale/overrideFlag', self.grpLocale.isChecked())
         self.mSettings.setValue('app/fontPointSize', self.spinFontSize.value())
         if self.mFontFamilyRadioQt.isChecked():
             self.mSettings.remove('app/fontFamily')
@@ -1076,7 +1131,7 @@ class QgsOptions(QgsOptionsDialogBase):
 
     def applyToApplication(self):
         app, settings = self.mApp, self.mSettings
-        for toolbar in app.findChildren(QToolBar): toolbar.setIconSize(QSize(self.cmbIconSize.currentData(), self.cmbIconSize.currentData()))
+        app.setIconSizes(int(self.cmbIconSize.currentData()))
         app.mMapCanvas.enableAntiAliasing(self.mRenderingOptionsWidget.chkAntiAliasing.isChecked())
         app.mMapCanvas.setMapUpdateInterval(self.mRenderingOptionsWidget.spinMapUpdateInterval.value())
         app.mMapCanvas.setWheelFactor(self.spinZoomFactor.value() / 100)

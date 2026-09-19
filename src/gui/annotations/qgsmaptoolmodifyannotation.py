@@ -392,7 +392,10 @@ class QgsMapToolModifyAnnotation(QgsMapToolAdvancedDigitizing):
         else: super().keyPressEvent(event)
 
     def eventFilter(self, watched, event):
-        if watched is self.canvas().viewport() and event.type() == QEvent.Leave:
+        # A tool can outlive its canvas (window teardown, canvas-less harness), so
+        # the viewport comparison must not assume canvas() is still valid.
+        canvas = self.canvas()
+        if canvas is not None and watched is canvas.viewport() and event.type() == QEvent.Leave:
             self.mLastMapPoint = None
             if self.mCurrentAction == self.NoAction: self.clearHoveredItem()
             self.mSnapIndicator.setMatch(QgsPointLocator.Match())
@@ -416,12 +419,17 @@ class QgsMapToolModifyAnnotation(QgsMapToolAdvancedDigitizing):
     def shutdown(self):
         from qgis.PyQt import sip
         self.mShutdown = True
-        self.canvas().mapCanvasRefreshed.disconnect(self.onCanvasRefreshed)
-        self.canvas().viewport().removeEventFilter(self)
+        # The canvas may already be gone during teardown; native keeps it as a
+        # member, here it is resolved through the app, so guard the access.
+        canvas = self.canvas()
+        if canvas is not None:
+            canvas.mapCanvasRefreshed.disconnect(self.onCanvasRefreshed)
+            canvas.viewport().removeEventFilter(self)
         self.mApp.mProject.layersWillBeRemoved.disconnect(self.layersWillBeRemoved)
         self.mApp.mProject.cleared.disconnect(self.projectCleared)
         self.mSnapIndicator.setMatch(QgsPointLocator.Match())
         for band in (self.mRubberBand, self.mHoverRubberBand, self.mNodeRubberBand,
                      self.mHoveredNodeRubberBand, self.mTemporaryRubberBand):
-            self.canvas().scene().removeItem(band)
+            if canvas is not None:
+                canvas.scene().removeItem(band)
             sip.delete(band)
