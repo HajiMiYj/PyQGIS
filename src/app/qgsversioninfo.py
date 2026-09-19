@@ -32,6 +32,13 @@ class QgsVersionInfo(QObject):
     def newVersionAvailable(self): return self.mLatestVersion > Qgis.QGIS_VERSION_INT
     def isDevelopmentVersion(self): return 0 < self.mLatestVersion < Qgis.QGIS_VERSION_INT
 
+    # Native accessors (qgsversioninfo.h) used by the welcome page.
+    def latestVersion(self): return self.mLatestVersion
+    def downloadInfo(self): return self.mDownloadInfo
+    def additionalHtml(self): return self.mAdditionalHtml
+    def error(self): return self.mError
+    def errorString(self): return self.mErrorString
+
     def versionReplyFinished(self):
         reply, self.mReply = self.mReply, None
         if reply.error() != QNetworkReply.NoError: self.mErrorString = reply.errorString()

@@ -151,18 +151,28 @@ def main():
     app = QgsApplication([], True, profileFolder)
     # Register application resources before constructing Designer or native widgets.
     from images import images_rc
-    from qgis.PyQt.QtGui import QPixmap, QColor
+    from qgis.PyQt.QtGui import QPixmap, QColor, QGuiApplication
     from qgis.PyQt.QtWidgets import QSplashScreen
     # Splash screen. Upstream 3.34.10 has this block commented out, but Options
     # still exposes qgis/hideSplash and main.cpp still documents --nologo, so the
-    # desktop port keeps it and honours both switches.
+    # desktop port keeps it and honours both switches. Sizing, mask and the
+    # staged messages follow the native QSplashScreen setup.
     splash = None
     if not args.smoke_test and not args.nologo and not QgsSettings().value('qgis/hideSplash', False, type=bool):
         splashPixmap = QPixmap(str(ROOT / 'images/splash/splash.png'))
         if not splashPixmap.isNull():
-            splash = QSplashScreen(splashPixmap.scaledToWidth(480, Qt.SmoothTransformation))
+            screen = QGuiApplication.primaryScreen()
+            if screen is not None:
+                splashPixmap.setDevicePixelRatio(screen.devicePixelRatio())
+            devicePixelRatio = splashPixmap.devicePixelRatioF()
+            splash = QSplashScreen(splashPixmap.scaled(
+                int(600 * devicePixelRatio), int(300 * devicePixelRatio),
+                Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            if screen is not None:
+                center = screen.availableGeometry().center()
+                splash.move(center - splash.rect().center())
+            splash.setMask(splashPixmap.mask())
             splash.show()
-            splash.showMessage('正在初始化 QGIS…', Qt.AlignBottom | Qt.AlignHCenter, QColor('white'))
             app.processEvents()
     app.initQgis()
     app.setWindowIcon(QIcon(QgsApplication.appIconPath()))
@@ -240,7 +250,8 @@ def main():
     # QgsApplication::installTranslators(), so no hardcoded translation is forced.
     from src.app.qgisapp import QgisApp
     window = QgisApp(customization=not args.nocustomization, customizationFile=args.customizationfile,
-                     rootProfileFolder=rootProfileFolder, profileName=profileName)
+                     rootProfileFolder=rootProfileFolder, profileName=profileName,
+                     splash=splash, skipVersionCheck=args.smoke_test)
     # Qt replaces the top level style with a QStyleSheetStyle once the theme
     # stylesheet is set, so keep the installed proxy for introspection.
     window.mAppStyle = appStyle
@@ -265,6 +276,15 @@ def main():
     QgsProject.instance().setDirty(False)
     if splash is not None:
         splash.finish(window)
+    # Native main.cpp calls completeInitialization() right after show(); it emits
+    # initializationCompleted, which QgisApp::fileOpenAfterLaunch() answers by
+    # honouring qgis/projOpenAtLaunch (welcome page / most recent / specific / new).
+    window.completeInitialization()
+    if args.smoke_test:
+        # The suites drive the map canvas, while qgis/projOpenAtLaunch == 0 makes
+        # the welcome page the startup view, so bring the canvas forward.
+        window.showMapCanvas()
+    QgsProject.instance().setDirty(False)
     # Native main.cpp warns when the "last used profile" policy fell back.
     if missingLastProfile:
         window.mMessageBar.pushWarning(

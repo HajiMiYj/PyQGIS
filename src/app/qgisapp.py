@@ -4,11 +4,13 @@ Native core/gui classes are imported, never reimplemented as fake substitutes.
 The shipped upstream UI and action inventory are the naming/structure baseline.
 """
 import json
+import hashlib
 from pathlib import Path
 import traceback
 from functools import partial
 from qgis.PyQt import uic, sip
-from qgis.PyQt.QtCore import QCoreApplication, Qt, QTimer, QUrl, QSize, QEvent
+from qgis.PyQt.QtCore import (QCoreApplication, Qt, QTimer, QUrl, QSize, QEvent, QRect, QRectF,
+                              QPoint, QPointF, QDir, pyqtSignal)
 
 # Native qgisapp.h: 24 on non-macOS builds, 32 on macOS.
 QGIS_ICON_SIZE = 24
@@ -23,13 +25,13 @@ def isDeleted(obj):
     """
     return isinstance(obj, sip.simplewrapper) and sip.isdeleted(obj)
 
-from qgis.PyQt.QtGui import QDesktopServices, QColor, QKeySequence, QIcon
+from qgis.PyQt.QtGui import QDesktopServices, QColor, QKeySequence, QIcon, QPixmap, QPainter
 from qgis.PyQt.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QDockWidget, QAction, QActionGroup,
     QMenu, QToolBar, QFileDialog, QMessageBox, QInputDialog, QLabel, QLineEdit,
     QCheckBox, QPushButton, QTreeWidget, QTableView, QUndoView, QDialog,
     QDialogButtonBox, QTabWidget, QFormLayout, QDoubleSpinBox, QSpinBox, QToolButton, QProgressBar,
-    QApplication,
+    QApplication, QStackedWidget,
 )
 from qgis.core import (
     Qgis, QgsApplication, QgsProject, QgsSettings, QgsCoordinateReferenceSystem,
@@ -69,14 +71,23 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class QgisApp(QMainWindow):
     _instance = None
+    # Native QgisApp signals used to leave the welcome page / notify plugins.
+    newProject = pyqtSignal()
+    projectRead = pyqtSignal()
 
     @staticmethod
     def instance():
         return QgisApp._instance
 
-    def __init__(self, customization=True, customizationFile=None, rootProfileFolder=None, profileName=''):
+    def __init__(self, customization=True, customizationFile=None, rootProfileFolder=None, profileName='',
+                 splash=None, skipVersionCheck=False):
         super().__init__()
         QgisApp._instance = self
+        # Native QgisApp owns the splash and shows staged progress through the ctor.
+        self.mSplash = splash
+        # QColor splashTextColor = Qgis::releaseName() == "Master" ? QColor(93,153,51) : Qt::black;
+        self.mSplashTextColor = QColor(93, 153, 51) if Qgis.releaseName() == 'Master' else QColor(Qt.black)
+        self.mSkipVersionCheck = skipVersionCheck
         from qgis.core import QgsUserProfileManager
         self.mRootProfileFolder = rootProfileFolder
         self.mProfileName = profileName
@@ -107,6 +118,10 @@ class QgisApp(QMainWindow):
         self.mRequirements = {}
         self.mPreviousSelections = {}
         self.mSettings = QgsSettings()
+        # Native ctor: mProjOpen = settings.value("qgis/projOpenAtLaunch", 0).toInt();
+        self.mProjOpen = self.mSettings.value('qgis/projOpenAtLaunch', 0, type=int)
+        self.mRecentProjects = []
+        self.mWelcomePage = None
         try:
             from src.ui.ui_qgisapp import Ui_MainWindow
         except ImportError:
@@ -119,11 +134,16 @@ class QgisApp(QMainWindow):
         self.setObjectName('QgisApp')
         self.resize(1440, 900)
         self.setAcceptDrops(True)
+        # Native ctor order: "Checking database" (QgsApplication::createDatabase),
+        # then "Reading settings", then "Setting up the GUI".
+        self.showSplashMessage('Checking database')
+        self.showSplashMessage('Reading settings')
         # self.setWindowIcon(QgsApplication.getThemeIcon('/qgis-icon.svg'))
         self.mProject = QgsProject.instance()
         self.mProject.setCrs(
             QgsCoordinateReferenceSystem(self.mSettings.value('projections/defaultProjectCrs', 'EPSG:4326')))
         self.mProject.setEllipsoid('WGS84')
+        self.showSplashMessage('Setting up the GUI')
         self.createCanvas()
         self.createMenus()
         self.createStatusBar()
@@ -135,6 +155,7 @@ class QgisApp(QMainWindow):
         qgis.utils.iface = self.mQgisInterface
         from console.console import init_options_widget
         init_options_widget()
+        self.showSplashMessage('Checking provider plugins')
         self.createMapTools()
         self.mProject.annotationManager().annotationAdded.connect(self.annotationCreated)
         self.mProject.readProjectWithContext.connect(self.restoreFormAnnotations)
@@ -144,7 +165,9 @@ class QgisApp(QMainWindow):
         self.createActions()
         from .mesh.qgsmaptooleditmeshframe import QgsMapToolEditMeshFrame
         self.mMeshEditTool = QgsMapToolEditMeshFrame(self.mMapCanvas, self.mAdvancedDigitizingDockWidget, self)
+        self.showSplashMessage('Starting Python')
         self.initProcessing()
+        self.showSplashMessage('Restoring loaded plugins')
         self.initCorePlugins()
         self.setTheme()
         self.createToolBars()
@@ -167,6 +190,9 @@ class QgisApp(QMainWindow):
         snappingLayout.setContentsMargins(0, 0, 0, 0)
         snappingLayout.addWidget(self.mSnappingDialog)
         self.mProject.layersAdded.connect(self.layersAdded)
+        # Native setupConnections(): QgisApp::projectRead -> fileOpenedOKAfterLaunch,
+        # which clears the "last auto-opened project failed" flag.
+        self.projectRead.connect(self.fileOpenedOKAfterLaunch)
         self.mProject.layersWillBeRemoved.connect(self.layersWillBeRemoved)
         self.mProject.isDirtyChanged.connect(self.updateWindowTitle)
         self.mProject.fileNameChanged.connect(self.updateWindowTitle)
@@ -176,9 +202,21 @@ class QgisApp(QMainWindow):
         self.mMapCanvas.extentsChanged.connect(self.updateStatusBar)
         self.mMapCanvas.setMapTool(self.mMapTools['pan'])
         self.mActionPan.setChecked(True)
+        self.showSplashMessage('Updating recent project paths')
+        self.readRecentProjects()
+        self.updateRecentProjectPaths()
+        # Native ctor (line 1697): feed the welcome page with the list it just read.
+        if self.mWelcomePage is not None:
+            self.mWelcomePage.setRecentProjects(self.mRecentProjects)
+        self.showSplashMessage('Initializing file filters')
+        # Native ctor now builds vector and raster file filters.
+        from qgis.core import QgsProviderRegistry
+        self.mVectorFileFilter = QgsProviderRegistry.instance().fileVectorFilters()
+        self.mRasterFileFilter = QgsProviderRegistry.instance().fileRasterFilters()
         # Native QgisApp::restoreWindowState(): the dock/toolbar layout is applied
         # on first show (QTBUG-89034), only geometry and the browser flag are
         # handled here. The built-in default layout supplies the initial arrangement.
+        self.showSplashMessage('Restoring window state')
         if self.mSettings.value('UI/hidebrowser', False, type=bool):
             self.mBrowserWidget.hide()
             if getattr(self, 'mBrowserWidget2', None): self.mBrowserWidget2.hide()
@@ -188,7 +226,6 @@ class QgisApp(QMainWindow):
             screen = QApplication.primaryScreen()
             if screen is not None: self.resize(screen.availableGeometry().size() * 0.8)
         QApplication.instance().aboutToQuit.connect(self.saveWindowState)
-        self.updateRecentProjects()
         self.initProjectFromTemplates()
         self.updateActionState()
         self.updateWindowTitle()
@@ -208,7 +245,10 @@ class QgisApp(QMainWindow):
             iconSize = QGIS_ICON_SIZE
             self.mSettings.setValue('qgis/toolbarIconSize', iconSize)
         self.setIconSizes(iconSize)
+        self.showSplashMessage('Populate saved styles')
+        QgsStyle.defaultStyle()
         self.writeCoverage()
+        self.showSplashMessage('QGIS Ready!')
 
     @staticmethod
     def panelIconSize(size):
@@ -267,8 +307,17 @@ class QgisApp(QMainWindow):
         self.mMapCanvas.setSnappingUtils(self.mSnappingUtils)
         self.mProject.snappingConfigChanged.connect(self.mSnappingUtils.setConfig)
         self.mProject.crsChanged.connect(lambda: self.mMapCanvas.setDestinationCrs(self.mProject.crs()))
-        layout.addWidget(self.mMapCanvas, 1)
+        # Native ctor: mCentralContainer = new QStackedWidget; index 0 = map
+        # canvas, index 1 = welcome page, shown when projOpenAtLaunch == 0.
+        self.mCentralContainer = QStackedWidget(container)
+        self.mCentralContainer.insertWidget(0, self.mMapCanvas)
+        layout.addWidget(self.mCentralContainer, 1)
         self.setCentralWidget(container)
+        self.createWelcomePage()
+        # Native ctor: connect(mMapCanvas, &QgsMapCanvas::layersChanged,
+        # this, &QgisApp::showMapCanvas) - adding a layer leaves the welcome page.
+        self.mMapCanvas.layersChanged.connect(self.showMapCanvas)
+        self.mCentralContainer.setCurrentIndex(0 if self.mProjOpen else 1)
 
     def createMenus(self):
         self.mPanelMenu = self.mViewMenu.addMenu(QCoreApplication.translate('QgisApp', 'Panels'))
@@ -1809,6 +1858,9 @@ class QgisApp(QMainWindow):
         self.mMapCanvas.refresh()
         self.mProject.setDirty(False)
         self.mQgisInterface.newProjectCreated.emit()
+        # Native fileNewBlank(): emit newProject so listeners (and the welcome page
+        # switch) know a fresh project is up.
+        self.newProject.emit()
         return True
 
     def fileNewBlank(self):
@@ -1952,7 +2004,10 @@ class QgisApp(QMainWindow):
                                                self.mProject)
             self.mMapCanvas.setExtent(transform.transformBoundingBox(extent))
         self.mMapCanvas.refresh()
-        self.addRecentProject(path)
+        self.showMapCanvas()
+        # Native fileOpen() emits projectRead before recording the recent entry.
+        self.projectRead.emit()
+        self.saveRecentProjectPath(False)
         return True
 
     def fileRevert(self):
@@ -1977,26 +2032,272 @@ class QgisApp(QMainWindow):
         if not self.mProject.write(path):
             self.mMessageBar.pushCritical('保存失败', self.mProject.error())
             return False
-        self.addRecentProject(path)
+        # Native saveProject(): record the saved project together with a new preview.
+        self.saveRecentProjectPath(True)
         return True
 
-    def addRecentProject(self, path):
-        paths = self.mSettings.value('PythonDesktop/recentProjects', [], type=list)
-        paths = [path] + [p for p in paths if p != path]
-        self.mSettings.setValue('PythonDesktop/recentProjects', paths[:12])
-        self.updateRecentProjects()
+    def showSplashMessage(self, text):
+        """Native mSplash->showMessage(tr(text), AlignHCenter | AlignBottom, color).
 
-    def updateRecentProjects(self):
+        Upstream 3.34.10 keeps these calls commented out together with the splash
+        construction, but the staged texts and their order are the native ones, so
+        the port shows the same sequence while the ctor runs.
+        """
+        if self.mSplash is None:
+            return
+        self.mSplash.showMessage(self.tr(text), Qt.AlignHCenter | Qt.AlignBottom,
+                                 self.mSplashTextColor)
+        # Native follows every message with qApp->processEvents() so it paints.
+        QApplication.processEvents()
+
+    def createWelcomePage(self):
+        """Native ctor: mCentralContainer->insertWidget(1, mWelcomePage)."""
+        from .qgswelcomepage import QgsWelcomePage
+        self.mWelcomePage = QgsWelcomePage(self.mSkipVersionCheck, self.mCentralContainer, self)
+        self.mCentralContainer.insertWidget(1, self.mWelcomePage)
+
+    def showMapCanvas(self):
+        """QgisApp::showMapCanvas(): map layers changed, so leave the welcome page."""
+        if getattr(self, 'mCentralContainer', None) is not None:
+            self.mCentralContainer.setCurrentIndex(0)
+
+    def completeInitialization(self):
+        """QgisApp::completeInitialization(): emits initializationCompleted."""
+        self.fileOpenAfterLaunch()
+
+    def fileOpenAfterLaunch(self):
+        """QgisApp::fileOpenAfterLaunch(): honour qgis/projOpenAtLaunch."""
+        # check if a data source is already loaded via command line or filesystem
+        if self.mProject is not None and self.mProject.count() > 0:
+            return
+        settings = QgsSettings()
+        autoOpenMsgTitle = self.tr('Auto-open Project')
+        projPath = ''
+        if self.mProjOpen == 0:  # welcome page
+            self.newProject.connect(self.showMapCanvas)
+            self.projectRead.connect(self.showMapCanvas)
+            return
+        if self.mProjOpen == 1 and self.mRecentProjects:  # most recent project
+            projPath = self.mRecentProjects[0].path
+        if self.mProjOpen == 2:  # specific project
+            projPath = settings.value('qgis/projOpenAtLaunchPath', '', type=str)
+
+        # whether last auto-opening of a project failed
+        projOpenedOK = settings.value('qgis/projOpenedOKAtLaunch', True, type=bool)
+        if not projOpenedOK:
+            # only show the following 'auto-open project failed' message once, at launch
+            settings.setValue('qgis/projOpenedOKAtLaunch', True)
+            # set auto-open project back to 'New' to avoid re-opening bad project
+            settings.setValue('qgis/projOpenAtLaunch', 0)
+            self.mMessageBar.pushMessage(autoOpenMsgTitle,
+                                         self.tr('Failed to open: %1').replace('%1', projPath),
+                                         Qgis.Critical)
+            return
+
+        if self.mProjOpen == 3:  # new project
+            # open default template, if defined
+            if settings.value('qgis/newProjectDefault', False, type=bool):
+                self.fileNewFromDefaultTemplate()
+            return
+
+        if not projPath:  # projPath required from here
+            return
+
+        # Is this a storage based project?
+        projectIsFromStorage = QgsApplication.projectStorageRegistry().projectStorageFromUri(projPath) is not None
+        lower = projPath.lower()
+        if not projectIsFromStorage and not lower.endswith('.qgs') and not lower.endswith('.qgz'):
+            self.mMessageBar.pushMessage(autoOpenMsgTitle,
+                                         self.tr('Not valid project file: %1').replace('%1', projPath),
+                                         Qgis.Warning)
+            return
+
+        if projectIsFromStorage or Path(projPath).exists():
+            # set flag to check on next app launch if the following project opened OK
+            settings.setValue('qgis/projOpenedOKAtLaunch', False)
+            if not self.addProject(projPath):
+                self.mMessageBar.pushMessage(
+                    autoOpenMsgTitle,
+                    self.tr('Project failed to open: %1').replace('%1', projPath), Qgis.Warning)
+            if projPath.endswith('project_default.qgs'):
+                self.mMessageBar.pushMessage(
+                    autoOpenMsgTitle,
+                    self.tr('Default template has been reopened: %1').replace('%1', projPath),
+                    Qgis.Info)
+        else:
+            self.mMessageBar.pushMessage(
+                autoOpenMsgTitle, self.tr('File not found: %1').replace('%1', projPath), Qgis.Warning)
+
+    def fileOpenedOKAfterLaunch(self):
+        QgsSettings().setValue('qgis/projOpenedOKAtLaunch', True)
+
+    def readRecentProjects(self):
+        """QgsRecentProjectItemsModel list from the native UI/recentProjects store.
+
+        Mirrors QgisApp::readRecentProjects(): pinned entries float to the top and
+        the legacy UI/recentProjectsList key is migrated on first use.
+        """
+        from .qgsrecentprojectsitemsmodel import RecentProjectData
+        settings = QgsSettings()
+        self.mRecentProjects = []
+        settings.beginGroup('UI')
+        # Migrate old recent projects if first time with new system
+        if 'recentProjects' not in settings.childGroups():
+            for project in settings.value('UI/recentProjectsList', [], type=list):
+                data = RecentProjectData()
+                data.path = project
+                data.title = project
+                self.mRecentProjects.append(data)
+        settings.endGroup()
+
+        settings.beginGroup('UI/recentProjects')
+        keys = sorted((key for key in settings.childGroups() if key.isdigit()), key=int)
+        maxProjects = settings.value('maxRecentProjects', 20, type=int)
+        pinPos = 0
+        for key in keys:
+            data = RecentProjectData()
+            settings.beginGroup(key)
+            data.title = settings.value('title', '', type=str)
+            data.path = settings.value('path', '', type=str)
+            data.previewImagePath = settings.value('previewImage', '', type=str)
+            data.crs = settings.value('crs', '', type=str)
+            data.pin = settings.value('pin', False, type=bool)
+            settings.endGroup()
+            if data.pin:
+                self.mRecentProjects.insert(pinPos, data)
+                pinPos += 1
+            else:
+                self.mRecentProjects.append(data)
+            if len(self.mRecentProjects) >= maxProjects:
+                break
+        settings.endGroup()
+
+    def saveRecentProjects(self):
+        """QgsSettings::setValue of the native /UI/recentProjects group."""
+        settings = QgsSettings()
+        settings.remove('UI/recentProjects')
+        for index, project in enumerate(self.mRecentProjects):
+            settings.beginGroup('UI/recentProjects/%d' % (index + 1))
+            settings.setValue('title', project.title)
+            settings.setValue('path', project.path)
+            settings.setValue('previewImage', project.previewImagePath)
+            settings.setValue('crs', project.crs)
+            settings.setValue('pin', project.pin)
+            settings.endGroup()
+
+    def createPreviewImage(self, path, icon=None):
+        """QgisApp::createPreviewImage(): 250x177 canvas render used by the welcome page."""
+        devicePixelRatio = self.mMapCanvas.mapSettings().devicePixelRatio()
+        previewSize = QSize(250, 177)
+        previewRect = QRect(QPoint(int((self.mMapCanvas.width() - previewSize.width()) / 2),
+                                   int((self.mMapCanvas.height() - previewSize.height()) / 2)),
+                            previewSize)
+        previewImage = QPixmap(previewSize * devicePixelRatio)
+        previewImage.setDevicePixelRatio(devicePixelRatio)
+        previewImage.fill()
+        previewPainter = QPainter(previewImage)
+        # PyQGIS takes a QRectF target (the C++ overload accepts QRect).
+        self.mMapCanvas.render(previewPainter, QRectF(QRect(QPoint(), previewSize)), previewRect)
+        if icon is not None and not icon.isNull():
+            previewPainter.drawPixmap(QPointF(250 - 24 - 5, 177 - 24 - 5), icon.pixmap(QSize(24, 24)))
+        previewPainter.end()
+        previewImage.save(path)
+
+    def saveRecentProjectPath(self, savePreviewImage, iconOverlay=None):
+        """QgisApp::saveRecentProjectPath(): record the current project, pinned first."""
+        from .qgsrecentprojectsitemsmodel import RecentProjectData
+        # Re-read first so concurrent sessions do not lose each other's entries
+        self.readRecentProjects()
+        projectData = RecentProjectData()
+        projectData.path = self.mProject.absoluteFilePath()
+        templateDirName = self.mSettings.value(
+            'qgis/projectTemplateDir',
+            str(Path(QgsApplication.qgisSettingsDirPath()) / 'project_templates'), type=str)
+        # We don't want the template path to appear in the recent projects list. Never.
+        if projectData.path.startswith(templateDirName):
+            return
+        if not projectData.path:  # in case of custom project storage
+            projectData.path = self.mProject.fileName() or self.mProject.originalPath()
+        projectData.title = self.mProject.title()
+        if not projectData.title:
+            projectData.title = self.mProject.baseName() or Path(self.mProject.originalPath()).stem
+        projectData.crs = self.mProject.crs().authid()
+        index = self.mRecentProjects.index(projectData) if projectData in self.mRecentProjects else -1
+        if index != -1:
+            projectData.pin = self.mRecentProjects[index].pin
+        if savePreviewImage:
+            previewDir = Path(QgsApplication.qgisSettingsDirPath()) / 'previewImages'
+            previewDir.mkdir(parents=True, exist_ok=True)
+            fileName = hashlib.md5(projectData.path.encode('utf-8')).hexdigest()
+            projectData.previewImagePath = str(previewDir / f'{fileName}.png')
+            self.createPreviewImage(projectData.previewImagePath, iconOverlay)
+        elif index != -1:
+            projectData.previewImagePath = self.mRecentProjects[index].previewImagePath
+
+        # Count the number of pinned items, those shouldn't affect trimming
+        pinnedCount = 0
+        nonPinnedPos = 0
+        pinnedTop = True
+        for recentProject in self.mRecentProjects:
+            if recentProject.pin:
+                pinnedCount += 1
+                if pinnedTop:
+                    nonPinnedPos += 1
+            elif pinnedTop:
+                pinnedTop = False
+
+        self.mRecentProjects = [entry for entry in self.mRecentProjects if entry != projectData]
+        self.mRecentProjects.insert(0 if projectData.pin else nonPinnedPos, projectData)
+
+        maxProjects = self.mSettings.value('maxRecentProjects', 20, type=int)
+        while len(self.mRecentProjects) > maxProjects + pinnedCount:
+            previewImagePath = self.mRecentProjects.pop().previewImagePath
+            if previewImagePath and Path(previewImagePath).exists():
+                Path(previewImagePath).unlink()
+        self.saveRecentProjects()
+        self.updateRecentProjectPaths()
+        if self.mWelcomePage is not None:
+            self.mWelcomePage.setRecentProjects(self.mRecentProjects)
+
+    def setRecentProjects(self, projects, clearPinned=False):
+        """Called by the welcome page after pin/unpin/remove/clear actions."""
+        self.mRecentProjects = list(projects)
+        self.saveRecentProjects()
+        self.updateRecentProjectPaths()
+        if self.mWelcomePage is not None:
+            self.mWelcomePage.setRecentProjects(self.mRecentProjects)
+
+    def updateRecentProjectPaths(self):
+        """QgisApp::updateRecentProjectPaths(): rebuild the "Open Recent" submenu."""
         self.mRecentProjectsMenu.clear()
-        paths = self.mSettings.value('PythonDesktop/recentProjects', [], type=list)
-        for path in paths:
-            self.mRecentProjectsMenu.addAction(path, partial(self.addProject, path))
+        for projectIndex, recentProject in enumerate(self.mRecentProjects):
+            title = recentProject.title if recentProject.title != recentProject.path \
+                else Path(recentProject.path).stem
+            action = self.mRecentProjectsMenu.addAction(
+                f'{title} ({QDir.toNativeSeparators(recentProject.path)})'.replace('&', '&&'))
+            storage = QgsApplication.projectStorageRegistry().projectStorageFromUri(recentProject.path)
+            if storage is not None:
+                path = storage.filePath(recentProject.path)
+                # for geopackage projects, the path will be empty, if not valid
+                if storage.type() == 'geopackage' and not path:
+                    action.setEnabled(False)
+                    action.setIcon(QgsApplication.getThemeIcon('/mIndicatorBadLayer.svg'))
+            else:
+                exists = Path(recentProject.path).exists()
+                action.setEnabled(exists)
+                if not exists:
+                    action.setIcon(QgsApplication.getThemeIcon('/mIndicatorBadLayer.svg'))
+            action.setData(projectIndex)
+            action.triggered.connect(partial(self.openProjectAction, recentProject.path))
+            if recentProject.pin:
+                action.setIcon(QgsApplication.getThemeIcon('/pin.svg'))
+
         if not hasattr(self, 'clearRecentProjectsAction'):
             self.clearRecentProjectsAction = QAction('清空列表', self)
             self.clearRecentProjectsAction.setObjectName('clearRecentProjectsAction')
             self.clearRecentProjectsAction.triggered.connect(self.clearRecentProjects)
-        self.clearRecentProjectsAction.setEnabled(bool(paths))
-        if paths:
+        self.clearRecentProjectsAction.setEnabled(bool(self.mRecentProjects))
+        if self.mRecentProjects:
             self.mRecentProjectsMenu.addSeparator()
             self.mRecentProjectsMenu.addAction(self.clearRecentProjectsAction)
         self.mDynamicActions['qgisapp:clearRecentProjectsAction'] = dict(action=self.clearRecentProjectsAction,
@@ -2004,9 +2305,28 @@ class QgisApp(QMainWindow):
                                                                          note='清空最近工程记录，保留磁盘工程文件。',
                                                                          inInterface=True)
 
+    def openProjectAction(self, path):
+        self.openProject(path)
+
+    def addRecentProject(self, path):
+        """Record one explicit path (used by tests and by callers without a project)."""
+        from .qgsrecentprojectsitemsmodel import RecentProjectData
+        data = RecentProjectData()
+        data.path = path
+        data.title = path
+        self.mRecentProjects = [entry for entry in self.mRecentProjects if entry != data]
+        self.mRecentProjects.insert(0, data)
+        self.saveRecentProjects()
+        self.updateRecentProjectPaths()
+        if self.mWelcomePage is not None:
+            self.mWelcomePage.setRecentProjects(self.mRecentProjects)
+
+    def updateRecentProjects(self):
+        """Compatibility alias for the native updateRecentProjectPaths()."""
+        self.updateRecentProjectPaths()
+
     def clearRecentProjects(self):
-        self.mSettings.remove('PythonDesktop/recentProjects')
-        self.updateRecentProjects()
+        self.setRecentProjects([], clearPinned=True)
 
     def initProjectFromTemplates(self):
         """Wire the template submenu and its refresh entry (native ctor 1263/1307)."""
