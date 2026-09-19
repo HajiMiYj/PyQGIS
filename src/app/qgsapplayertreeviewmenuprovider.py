@@ -1,4 +1,5 @@
 """Application layer-tree context menu; upstream class/file names retained."""
+from qgis.PyQt.QtCore import QCoreApplication
 from qgis.PyQt.QtWidgets import QMenu, QInputDialog, QAction
 from qgis.core import (QgsLayerTreeLayer, QgsLayerTreeGroup, QgsMapLayerType,
                        QgsVectorLayer, QgsRasterLayer, QgsMeshLayer, QgsPointCloudLayer,
@@ -29,7 +30,7 @@ class QgsAppLayerTreeViewMenuProvider(QgsLayerTreeViewMenuProvider):
             self.mContextActions[name] = action
             app.mDynamicActions['layertree:'+name] = dict(action=action, handler=name,
                 note='图层树右键菜单调用原生默认动作；使用当前选择与节点。', inInterface=True)
-        self.actionShowLabels = QAction('显示标注', app)
+        self.actionShowLabels = QAction(QCoreApplication.translate('QObject', 'Show label'), app)
         self.actionShowLabels.setObjectName('actionShowLabels')
         self.actionShowLabels.setCheckable(True)
         self.actionShowLabels.toggled.connect(self.toggleLabels)
@@ -75,7 +76,7 @@ class QgsAppLayerTreeViewMenuProvider(QgsLayerTreeViewMenuProvider):
             return menu
         menu.addSeparator()
         menu.addAction(defaults.actionRenameGroupOrLayer(menu))
-        menu.addAction('移除图层/组', self.mApp.removeLayer)
+        menu.addAction(QCoreApplication.translate('MainWindow', 'Remove Layer/Group'), self.mApp.removeLayer)
         if isinstance(node, QgsLayerTreeGroup):
             for name in ('actionZoomToGroup', 'actionCheckAndAllChildren', 'actionUncheckAndAllChildren',
                          'actionMoveToTop', 'actionMoveToBottom'):
@@ -108,7 +109,7 @@ class QgsAppLayerTreeViewMenuProvider(QgsLayerTreeViewMenuProvider):
             menu.addAction(self.mContextActions['zoomToLayerScale'])
         if isinstance(layer, (QgsVectorLayer, QgsRasterLayer, QgsMeshLayer, QgsPointCloudLayer)):
             changeAction = self.mContextActions['changeDataSource']
-            changeAction.setText('修复数据源…' if not layer.isValid() else '更改数据源…')
+            changeAction.setText(QCoreApplication.translate('QgsAppLayerTreeViewMenuProvider', 'Repair Data Source…') if not layer.isValid() else '更改数据源…')
             changeAction.setEnabled(not layer.isEditable())
             menu.addAction(changeAction)
         if isinstance(layer, QgsRasterLayer):
@@ -123,10 +124,10 @@ class QgsAppLayerTreeViewMenuProvider(QgsLayerTreeViewMenuProvider):
                 menu.addAction(getattr(self.mApp, name))
             menu.addAction(defaults.actionShowFeatureCount(menu))
         menu.addSeparator()
-        export = menu.addMenu('导出')
+        export = menu.addMenu(QCoreApplication.translate('QgsAuthCertInfo', 'Export'))
         export.addAction(self.mApp.mActionLayerSaveAs)
         export.addAction('保存图层定义…', self.mApp.saveAsLayerDefinition)
-        styles = menu.addMenu('样式')
+        styles = menu.addMenu(QCoreApplication.translate('QgsAppLayerTreeViewMenuProvider', 'Styles'))
         styles.addAction(self.mApp.mActionCopyStyle)
         styles.addAction(self.mApp.mActionPasteStyle)
         styles.addAction('加载样式…', self.mApp.loadStyle)
@@ -146,7 +147,7 @@ class QgsAppLayerTreeViewMenuProvider(QgsLayerTreeViewMenuProvider):
         return menu
 
     def addStyle(self, layer):
-        name, ok = QInputDialog.getText(self.mApp, '新样式', '名称')
+        name, ok = QInputDialog.getText(self.mApp, '新样式', QCoreApplication.translate('DBManagerPlugin', 'Name'))
         if ok and name:
             layer.styleManager().addStyleFromLayer(name)
             layer.styleManager().setCurrentStyle(name)

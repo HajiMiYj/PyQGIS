@@ -3,7 +3,7 @@
 Currently provides item selection/movement, common items, undo and exports.
 This is not yet a port of every upstream designer property panel.
 """
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.PyQt.QtWidgets import QMainWindow, QToolBar, QFileDialog, QInputDialog, QDockWidget, QFormLayout, QWidget, QDoubleSpinBox, QLineEdit, QPushButton
 from qgis.core import QgsLayoutItemMap, QgsLayoutItemLabel, QgsLayoutItemLegend, QgsLayoutItemScaleBar, QgsLayoutItemPicture, QgsLayoutItemShape, QgsLayoutPoint, QgsLayoutSize, QgsLayoutExporter
 from qgis.gui import QgsLayoutView, QgsLayoutViewToolSelect, QgsLayoutViewToolPan, QgsLayoutViewToolZoom
@@ -21,16 +21,16 @@ class QgsLayoutDesignerDialog(QMainWindow):
         self.setCentralWidget(self.mView)
         self.mTools = [QgsLayoutViewToolSelect(self.mView), QgsLayoutViewToolPan(self.mView), QgsLayoutViewToolZoom(self.mView)]
         self.mView.setTool(self.mTools[0])
-        self.mLayoutToolbar = self.addToolBar('布局')
+        self.mLayoutToolbar = self.addToolBar(QCoreApplication.translate('QgsLayoutDesignerDialog', 'Layout'))
         self.mLayoutToolbar.setObjectName('mLayoutToolbar')
-        self.mLayoutToolbar.addAction('保存工程', app.fileSave)
+        self.mLayoutToolbar.addAction(QCoreApplication.translate('MainWindow', 'Save Project'), app.fileSave)
         self.mLayoutToolbar.addAction('PDF', self.exportToPdf)
-        self.mLayoutToolbar.addAction('图像', self.exportToImage)
+        self.mLayoutToolbar.addAction(QCoreApplication.translate('MainWindow', 'Image'), self.exportToImage)
         self.mLayoutToolbar.addAction('SVG', self.exportToSvg)
-        self.mLayoutToolbar.addAction('撤销', layout.undoStack().stack().undo)
-        self.mLayoutToolbar.addAction('重做', layout.undoStack().stack().redo)
+        self.mLayoutToolbar.addAction(QCoreApplication.translate('MainWindow', 'Undo'), layout.undoStack().stack().undo)
+        self.mLayoutToolbar.addAction(QCoreApplication.translate('MainWindow', 'Redo'), layout.undoStack().stack().redo)
         self.mLayoutToolbar.addAction('全页', self.mView.zoomFull)
-        self.mToolsToolbar = self.addToolBar('工具')
+        self.mToolsToolbar = self.addToolBar(QCoreApplication.translate('AddModelFromFileAction', 'Tools'))
         self.mToolsToolbar.setObjectName('mToolsToolbar')
         for name, tool in zip(['选择/移动', '平移', '缩放'], self.mTools):
             self.mToolsToolbar.addAction(name, lambda checked=False, t=tool: self.mView.setTool(t))
@@ -79,7 +79,7 @@ class QgsLayoutDesignerDialog(QMainWindow):
             if maps: item.setLinkedMap(maps[0])
             if kind == 'scale': item.applyDefaultSize()
         elif kind == 'picture':
-            path, _ = QFileDialog.getOpenFileName(self, '图片', '', '图片 (*.svg *.png *.jpg)')
+            path, _ = QFileDialog.getOpenFileName(self, QCoreApplication.translate('QObject', 'Picture'), '', '图片 (*.svg *.png *.jpg)')
             if path: item.setPicturePath(path)
         self.mLayout.setSelectedItem(item)
 
@@ -109,7 +109,7 @@ class QgsLayoutDesignerDialog(QMainWindow):
         for item in self.mLayout.selectedLayoutItems(): self.mLayout.removeLayoutItem(item)
 
     def export(self, kind):
-        path, _ = QFileDialog.getSaveFileName(self, '导出布局', '', {'pdf': 'PDF (*.pdf)', 'image': 'PNG (*.png)', 'svg': 'SVG (*.svg)'}[kind])
+        path, _ = QFileDialog.getSaveFileName(self, QCoreApplication.translate('QgsLayoutDesignerDialog', 'Export layout'), '', {'pdf': 'PDF (*.pdf)', 'image': 'PNG (*.png)', 'svg': 'SVG (*.svg)'}[kind])
         if not path: return
         exporter = QgsLayoutExporter(self.mLayout)
         if kind == 'pdf': result = exporter.exportToPdf(path, QgsLayoutExporter.PdfExportSettings())

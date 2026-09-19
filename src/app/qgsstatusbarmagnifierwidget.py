@@ -1,6 +1,6 @@
 from qgis.PyQt.QtWidgets import QWidget, QHBoxLayout, QLabel, QToolButton
 from qgis.core import QgsApplication, QgsSettings
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.gui import QgsDoubleSpinBox
 
 
@@ -10,7 +10,7 @@ class QgsStatusBarMagnifierWidget(QWidget):
         box = QHBoxLayout(self)
         box.setContentsMargins(0, 0, 0, 0)
         box.setSpacing(0)
-        self.mLabel = QLabel('放大镜', self)
+        self.mLabel = QLabel(QCoreApplication.translate('QgsStatusBarMagnifierWidget', 'Magnifier'), self)
         self.mLabel.setMargin(3)
         self.mLabel.setMinimumWidth(10)
         self.mLabel.setAlignment(Qt.AlignCenter)

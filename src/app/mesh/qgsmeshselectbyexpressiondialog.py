@@ -1,3 +1,4 @@
+from qgis.PyQt.QtCore import QCoreApplication
 from pathlib import Path
 from qgis.PyQt import uic
 from qgis.PyQt.QtWidgets import QDialog, QAction
@@ -20,7 +21,7 @@ class QgsMeshSelectByExpressionDialog(QDialog):
             setattr(self, name, action)
             self.mButtonSelect.addAction(action)
         self.mButtonSelect.setDefaultAction(self.mActionSelect)
-        self.mComboBoxElementType.addItem('顶点', QgsMesh.Vertex)
+        self.mComboBoxElementType.addItem(QCoreApplication.translate('Line3DSymbolWidget', 'Vertex'), QgsMesh.Vertex)
         self.mComboBoxElementType.addItem('面', QgsMesh.Face)
         index = self.mComboBoxElementType.findData(QgsSettings().value('/meshSelection/elementType', int(QgsMesh.Vertex), type=int))
         self.mComboBoxElementType.setCurrentIndex(max(index, 0))

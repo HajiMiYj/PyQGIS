@@ -1,5 +1,5 @@
 """Counterpart of src/app/qgsstatusbarscalewidget.cpp."""
-from qgis.PyQt.QtCore import Qt, QLocale
+from qgis.PyQt.QtCore import QCoreApplication, Qt, QLocale
 from qgis.PyQt.QtWidgets import QWidget, QHBoxLayout, QLabel
 from qgis.core import QgsProject
 from qgis.gui import QgsScaleComboBox
@@ -9,7 +9,7 @@ class QgsStatusBarScaleWidget(QWidget):
     def __init__(self, canvas, parent=None):
         super().__init__(parent)
         self.mMapCanvas = canvas
-        self.mLabel = QLabel('比例尺', self)
+        self.mLabel = QLabel(QCoreApplication.translate('QObject', 'Scalebar'), self)
         self.mLabel.setObjectName('mScaleLabel')
         self.mLabel.setMargin(3)
         self.mLabel.setAlignment(Qt.AlignCenter)

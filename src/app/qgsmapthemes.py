@@ -1,5 +1,5 @@
 """QgsMapThemes app menu, backed by the native project theme collection."""
-from qgis.PyQt.QtCore import QObject
+from qgis.PyQt.QtCore import QCoreApplication, QObject
 from qgis.PyQt.QtWidgets import QMenu, QInputDialog, QMessageBox
 from qgis.core import QgsMapThemeCollection
 
@@ -16,11 +16,11 @@ class QgsMapThemes(QObject):
         return QgsMapThemeCollection.createThemeFromCurrentState(self.mApp.mProject.layerTreeRoot(), self.mApp.mLayerTreeModel)
     def addPreset(self, name=None):
         if name is None:
-            name, ok = QInputDialog.getText(self.mApp, '添加地图主题', '名称')
+            name, ok = QInputDialog.getText(self.mApp, '添加地图主题', QCoreApplication.translate('DBManagerPlugin', 'Name'))
             if not ok: return
         if not name: return
         if name in self.collection().mapThemes():
-            QMessageBox.warning(self.mApp, '地图主题', '该名称已经存在')
+            QMessageBox.warning(self.mApp, QCoreApplication.translate('QgsMapThemes', 'Map Themes'), '该名称已经存在')
             return
         self.collection().insert(name, self.currentState())
         self.mApp.mProject.setDirty(True)
@@ -30,10 +30,10 @@ class QgsMapThemes(QObject):
     def applyState(self, name):
         self.collection().applyTheme(name, self.mApp.mProject.layerTreeRoot(), self.mApp.mLayerTreeModel)
     def renameCurrentPreset(self, name):
-        newName, ok = QInputDialog.getText(self.mApp, '重命名主题', '名称', text=name)
+        newName, ok = QInputDialog.getText(self.mApp, '重命名主题', QCoreApplication.translate('DBManagerPlugin', 'Name'), text=name)
         if ok and newName:
             if not self.collection().renameMapTheme(name, newName):
-                QMessageBox.warning(self.mApp, '地图主题', '名称已存在或主题已被删除')
+                QMessageBox.warning(self.mApp, QCoreApplication.translate('QgsMapThemes', 'Map Themes'), '名称已存在或主题已被删除')
             else: self.mApp.mProject.setDirty(True)
     def removeCurrentPreset(self, name):
         self.collection().removeMapTheme(name)
@@ -52,10 +52,10 @@ class QgsMapThemes(QObject):
             action.setChecked(matched)
             if matched: current = name
         self.mMenu.addSeparator()
-        self.mMenu.addAction('添加主题…', lambda: self.addPreset())
+        self.mMenu.addAction(QCoreApplication.translate('QgsMapThemes', 'Add Theme…'), lambda: self.addPreset())
         replace = self.mMenu.addMenu('替换主题')
         for name in self.collection().mapThemes(): replace.addAction(name, lambda checked=False, n=name: self.updatePreset(n))
-        rename = self.mMenu.addAction('重命名当前主题…', lambda: self.renameCurrentPreset(current))
-        remove = self.mMenu.addAction('移除当前主题', lambda: self.removeCurrentPreset(current))
+        rename = self.mMenu.addAction(QCoreApplication.translate('QgsMapThemes', 'Rename Current Theme…'), lambda: self.renameCurrentPreset(current))
+        remove = self.mMenu.addAction(QCoreApplication.translate('QgsMapThemes', 'Remove Current Theme'), lambda: self.removeCurrentPreset(current))
         rename.setEnabled(current is not None)
         remove.setEnabled(current is not None)

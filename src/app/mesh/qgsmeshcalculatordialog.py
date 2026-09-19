@@ -1,7 +1,7 @@
 """QGIS 3.34 mesh calculator: original UI, native persistent/virtual calculation."""
 from pathlib import Path
 from qgis.PyQt import uic
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.PyQt.QtGui import QFontDatabase
 from qgis.PyQt.QtWidgets import QDialog, QDialogButtonBox, QMessageBox, QProgressDialog
 from qgis.core import (Qgis, QgsProject, QgsApplication, QgsSettings, QgsMeshCalculator,
@@ -221,12 +221,12 @@ class QgsMeshCalculatorDialog(QDialog):
         groupNameValid = bool(self.groupName()) and self.groupName() not in self.mVariableNames
 
         if expressionValid and (notInFile or (driverValid and filePathValid)) and groupNameValid:
-            self.mExpressionValidLabel.setText('表达式有效')
+            self.mExpressionValidLabel.setText(QCoreApplication.translate('QgsMeshCalculatorDialog', 'Expression valid'))
             self.mButtonBox.button(QDialogButtonBox.Ok).setEnabled(True)
         else:
             self.mButtonBox.button(QDialogButtonBox.Ok).setEnabled(False)
             if not expressionValid:
-                self.mExpressionValidLabel.setText('表达式无效')
+                self.mExpressionValidLabel.setText(QCoreApplication.translate('QgsMeshCalculatorDialog', 'Expression invalid'))
             elif not filePathValid and not notInFile:
                 self.mExpressionValidLabel.setText('输出路径无效')
             elif not driverValid and not notInFile:
@@ -278,7 +278,7 @@ class QgsMeshCalculatorDialog(QDialog):
         if not self.mUseVirtualProviderCheckBox.isChecked() and Path(self.outputFile()).exists():
             QMessageBox.warning(self, '输出文件已存在', '请选择新文件名，以免覆盖网格已经引用的数据集。')
             return
-        progress = QProgressDialog('正在计算网格表达式…', '取消', 0, 100, self)
+        progress = QProgressDialog('正在计算网格表达式…', QCoreApplication.translate('DbManagerDlgSqlWindow', 'Cancel'), 0, 100, self)
         progress.setWindowModality(Qt.WindowModal)
         feedback = QgsFeedback()
         progress.canceled.connect(feedback.cancel)

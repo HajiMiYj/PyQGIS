@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 import zipfile
 import configparser
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.PyQt.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QPushButton, QLabel, QFileDialog, QMessageBox
 from qgis.core import QgsApplication
 import qgis.utils
@@ -64,7 +64,7 @@ class QgsPluginManager(QDialog):
         self.mLoaded.clear()
 
     def installFromZip(self):
-        path, _ = QFileDialog.getOpenFileName(self, '安装插件', '', 'ZIP (*.zip)')
+        path, _ = QFileDialog.getOpenFileName(self, QCoreApplication.translate('QgsPluginManager', 'Install Plugin'), '', 'ZIP (*.zip)')
         if not path: return
         try:
             with zipfile.ZipFile(path) as archive:

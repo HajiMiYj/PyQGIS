@@ -4,7 +4,7 @@ qgsloadrasterattributetabledialog.cpp and qgscreaterasterattributetabledialog.cp
 The upstream dialogs are GUI_EXPORT but not exposed to PyQGIS, so they are
 rebuilt here against the bound QgsRasterAttributeTable / provider APIs.
 """
-from qgis.PyQt.QtCore import QFile
+from qgis.PyQt.QtCore import QCoreApplication, QFile
 from qgis.PyQt.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QCheckBox, QRadioButton, QButtonGroup,
     QDialogButtonBox, QMessageBox, QLabel,
@@ -23,7 +23,7 @@ class QgsLoadRasterAttributeTableDialog(QDialog):
         form = QFormLayout()
         self.mRasterBand = QgsRasterBandComboBox()
         self.mRasterBand.setLayer(rasterLayer)
-        form.addRow('栅格波段', self.mRasterBand)
+        form.addRow(QCoreApplication.translate('Processing', 'Raster Band'), self.mRasterBand)
         self.mDbfPathWidget = QgsFileWidget()
         self.mDbfPathWidget.setFilter('VAT DBF 文件 (*.vat.dbf)')
         form.addRow('VAT.DBF 文件', self.mDbfPathWidget)
@@ -64,7 +64,7 @@ class QgsLoadRasterAttributeTableDialog(QDialog):
             self.notify('加载栅格属性表失败', '无法加载栅格属性表。', Qgis.Critical)
             return
         if not rat.isValid():
-            answer = QMessageBox.warning(self, '无效栅格属性表',
+            answer = QMessageBox.warning(self, QCoreApplication.translate('QgsLoadRasterAttributeTableDialog', 'Invalid Raster Attribute Table'),
                                          '该栅格属性表无效。仍然加载吗？',
                                          QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
             if answer == QMessageBox.Cancel:
@@ -90,7 +90,7 @@ class QgsCreateRasterAttributeTableDialog(QDialog):
         super().__init__(parent)
         self.mRasterLayer = rasterLayer
         self.mMessageBar = None
-        self.setWindowTitle('创建栅格属性表')
+        self.setWindowTitle(QCoreApplication.translate('QgsAppLayerTreeViewMenuProvider', 'Create Raster Attribute Table'))
         layout = QVBoxLayout(self)
         nativeSupported = bool(rasterLayer.dataProvider().providerCapabilities()
                                & QgsRasterDataProvider.NativeRasterAttributeTable)

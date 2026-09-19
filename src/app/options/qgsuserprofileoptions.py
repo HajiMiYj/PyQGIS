@@ -4,6 +4,7 @@ The port already had the profile *selection* dialog; this is the User Profiles
 options page: which profile is loaded at startup, the profile selector icon size
 and the active profile's icon.
 """
+from qgis.PyQt.QtCore import QCoreApplication
 from pathlib import Path
 import shutil
 from qgis.PyQt import uic
@@ -88,7 +89,7 @@ class QgsUserProfileOptionsWidget(QgsOptionsPageWidget):
             if path.is_file(): path.unlink()
 
     def onChangeIconClicked(self):
-        path, _ = QFileDialog.getOpenFileName(self, '选择图标', '', ICON_FILTER)
+        path, _ = QFileDialog.getOpenFileName(self, QCoreApplication.translate('QgsUserProfileOptionsWidget', 'Select Icon'), '', ICON_FILTER)
         if not path: return
         self.removeIconFiles()
         # Native stores the profile icon as icon.<extension> inside the profile.

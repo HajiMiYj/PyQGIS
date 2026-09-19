@@ -6,7 +6,7 @@ Widget capture only changes the draft tree; it never executes the clicked action
 from pathlib import Path
 import xml.etree.ElementTree as ET
 from qgis.PyQt import sip, uic
-from qgis.PyQt.QtCore import QObject, QEvent, Qt, QSettings, QTimer
+from qgis.PyQt.QtCore import QCoreApplication, QObject, QEvent, Qt, QSettings, QTimer
 from qgis.PyQt.QtWidgets import (QApplication, QMainWindow, QDialog, QDialogButtonBox,
     QTreeWidgetItem, QToolBar, QDockWidget, QWidget, QToolButton, QWidgetAction,
     QMenu, QFileDialog, QMessageBox, QRubberBand)
@@ -338,14 +338,14 @@ class QgsCustomizationDialog(QMainWindow):
         if not filename: return
         if not filename.lower().endswith('.ini'): filename += '.ini'
         try: self.saveToFile(filename)
-        except OSError as error: QMessageBox.warning(self, '界面自定义', str(error))
+        except OSError as error: QMessageBox.warning(self, QCoreApplication.translate('QgsCustomizationDialogBase', 'Interface Customization'), str(error))
         self.mSettings.setValue('UI/lastCustomizationDir', str(Path(filename).parent))
 
     def actionLoad_triggered(self):
         filename, _ = QFileDialog.getOpenFileName(self, '载入界面自定义', self.mSettings.value('UI/lastCustomizationDir', str(Path.home())), '界面自定义 (*.ini)')
         if not filename: return
         try: self.loadFromFile(filename)
-        except OSError as error: QMessageBox.warning(self, '界面自定义', str(error))
+        except OSError as error: QMessageBox.warning(self, QCoreApplication.translate('QgsCustomizationDialogBase', 'Interface Customization'), str(error))
         self.mSettings.setValue('UI/lastCustomizationDir', str(Path(filename).parent))
 
     def showHelp(self): QgsHelp.openHelp('introduction/qgis_configuration.html#customization')

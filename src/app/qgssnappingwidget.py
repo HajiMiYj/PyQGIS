@@ -10,7 +10,7 @@ QgsSnappingLayerTreeModel / QgsSnappingLayerDelegate are application classes
 without Python bindings, so the advanced per-layer configuration is rebuilt
 with the bound QgsSnappingConfig individual-layer APIs.
 """
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.PyQt.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QGridLayout, QToolBar, QToolButton, QComboBox,
     QCheckBox, QDialog, QTableWidget, QTableWidgetItem, QDialogButtonBox, QAction,
@@ -72,7 +72,7 @@ class QgsSnappingWidget(QWidget):
         self.mEnabledAction = QAction('Toggle Snapping', self)
         self.mEnabledAction.setCheckable(True)
         self.mEnabledAction.setIcon(QgsApplication.getThemeIcon('/mIconSnapping.svg'))
-        self.mEnabledAction.setToolTip('启用捕捉 (S)')
+        self.mEnabledAction.setToolTip(QCoreApplication.translate('QgsSnappingWidget', 'Enable Snapping (S)'))
         self.mEnabledAction.setShortcut('S')
         self.mEnabledAction.setObjectName('EnableSnappingAction')
         self.mEnabledAction.toggled.connect(self.enableSnapping)
@@ -80,7 +80,7 @@ class QgsSnappingWidget(QWidget):
         self.mTopologicalEditingAction = QAction('Topological Editing', self)
         self.mTopologicalEditingAction.setCheckable(True)
         self.mTopologicalEditingAction.setIcon(QgsApplication.getThemeIcon('/mIconTopologicalEditing.svg'))
-        self.mTopologicalEditingAction.setToolTip('启用拓扑编辑')
+        self.mTopologicalEditingAction.setToolTip(QCoreApplication.translate('QgsSnappingWidget', 'Enable Topological Editing'))
         self.mTopologicalEditingAction.setObjectName('TopologicalEditingAction')
         self.mTopologicalEditingAction.toggled.connect(self.enableTopologicalEditing)
 
@@ -94,7 +94,7 @@ class QgsSnappingWidget(QWidget):
         self.mEnableTracingAction = QAction('Enable Tracing', self)
         self.mEnableTracingAction.setCheckable(True)
         self.mEnableTracingAction.setIcon(QgsApplication.getThemeIcon('/mActionTracing.svg'))
-        self.mEnableTracingAction.setToolTip('启用追踪 (T)')
+        self.mEnableTracingAction.setToolTip(QCoreApplication.translate('QgsSnappingWidget', 'Enable Tracing (T)'))
         self.mEnableTracingAction.setShortcut('T')
         self.mEnableTracingAction.setObjectName('EnableTracingAction')
 
@@ -111,8 +111,8 @@ class QgsSnappingWidget(QWidget):
         self.mAvoidIntersectionsModeButton = QToolButton(self)
         self.mAvoidIntersectionsModeButton.setToolTip('启用避免重叠后，绘制的要素将被裁剪以避免与现有要素重叠。')
         self.mAvoidIntersectionsModeButton.setPopupMode(QToolButton.InstantPopup)
-        avoidMenu = QMenu('设置避免重叠模式', self)
-        self.mAllowIntersectionsAction = QAction(QgsApplication.getThemeIcon('/mActionAllowIntersections.svg'), '允许重叠', avoidMenu)
+        avoidMenu = QMenu(QCoreApplication.translate('QgsSnappingWidget', 'Set Avoid Overlap Mode'), self)
+        self.mAllowIntersectionsAction = QAction(QgsApplication.getThemeIcon('/mActionAllowIntersections.svg'), QCoreApplication.translate('QgsSnappingWidget', 'Allow Overlap'), avoidMenu)
         self.mAvoidIntersectionsCurrentLayerAction = QAction(
             QgsApplication.getThemeIcon('/mActionAvoidIntersectionsCurrentLayer.svg'), '当前图层避免重叠', avoidMenu)
         self.mAvoidIntersectionsCurrentLayerAction.setToolTip(
@@ -128,18 +128,18 @@ class QgsSnappingWidget(QWidget):
 
         # snapping mode button
         self.mModeButton = QToolButton(self)
-        self.mModeButton.setToolTip('捕捉模式')
+        self.mModeButton.setToolTip(QCoreApplication.translate('QgsSnappingWidget', 'Snapping Mode'))
         self.mModeButton.setPopupMode(QToolButton.InstantPopup)
-        modeMenu = QMenu('设置捕捉模式', self)
+        modeMenu = QMenu(QCoreApplication.translate('QgsSnappingWidget', 'Set Snapping Mode'), self)
         self.mAllLayersAction = QAction(QgsApplication.getThemeIcon('/mIconSnappingAllLayers.svg'), '所有图层', modeMenu)
-        self.mActiveLayerAction = QAction(QgsApplication.getThemeIcon('/mIconSnappingActiveLayer.svg'), '当前图层', modeMenu)
-        self.mAdvancedModeAction = QAction(QgsApplication.getThemeIcon('/mIconSnappingAdvanced.svg'), '高级配置', modeMenu)
+        self.mActiveLayerAction = QAction(QgsApplication.getThemeIcon('/mIconSnappingActiveLayer.svg'), QCoreApplication.translate('QgsIdentifyResultsDialog', 'Current Layer'), modeMenu)
+        self.mAdvancedModeAction = QAction(QgsApplication.getThemeIcon('/mIconSnappingAdvanced.svg'), QCoreApplication.translate('QgsSnappingWidget', 'Advanced Configuration'), modeMenu)
         modeMenu.addAction(self.mAllLayersAction)
         modeMenu.addAction(self.mActiveLayerAction)
         modeMenu.addAction(self.mAdvancedModeAction)
         if self.mDisplayMode == 'toolbar':
             modeMenu.addSeparator()
-            openDialogAction = QAction('打开捕捉选项…', modeMenu)
+            openDialogAction = QAction(QCoreApplication.translate('QgsSnappingWidget', 'Open Snapping Options…'), modeMenu)
             openDialogAction.triggered.connect(self.openSnappingOptions)
             modeMenu.addAction(openDialogAction)
         self.mModeButton.setMenu(modeMenu)
@@ -148,7 +148,7 @@ class QgsSnappingWidget(QWidget):
 
         # snapping type button
         self.mTypeButton = QToolButton(self)
-        self.mTypeButton.setToolTip('捕捉类型')
+        self.mTypeButton.setToolTip(QCoreApplication.translate('QgsSnappingWidget', 'Snapping Type'))
         self.mTypeButton.setPopupMode(QToolButton.InstantPopup)
         typeMenu = QMenu('设置捕捉类型', self)
         for snappingType in self.SNAPPING_TYPES:
@@ -186,7 +186,7 @@ class QgsSnappingWidget(QWidget):
         tracingMenu = QMenu(self)
         tracingWidget = QWidget()
         tracingLayout = QVBoxLayout(tracingWidget)
-        tracingLayout.addWidget(QLabel('偏移'))
+        tracingLayout.addWidget(QLabel(QCoreApplication.translate('Map3DConfigWidget', 'Offset')))
         tracingLayout.addWidget(self.mTracingOffsetSpinBox)
         tracingWidgetAction = QWidgetAction(tracingMenu)
         tracingWidgetAction.setDefaultWidget(tracingWidget)
@@ -197,7 +197,7 @@ class QgsSnappingWidget(QWidget):
         self.mEditAdvancedConfigButton = QToolButton(self)
         self.mEditAdvancedConfigButton.setPopupMode(QToolButton.InstantPopup)
         self.mEditAdvancedConfigButton.setIcon(QgsApplication.getThemeIcon('/mActionShowAllLayers.svg'))
-        self.mEditAdvancedConfigButton.setToolTip('编辑高级配置')
+        self.mEditAdvancedConfigButton.setToolTip(QCoreApplication.translate('QgsSnappingWidget', 'Edit advanced configuration'))
         self.mEditAdvancedConfigButton.setObjectName('EditAdvancedConfigurationButton')
         self.mEditAdvancedConfigMenu = QMenu(self)
         self.mEditAdvancedConfigButton.setMenu(self.mEditAdvancedConfigMenu)
@@ -237,9 +237,9 @@ class QgsSnappingWidget(QWidget):
         self.mSnappingScaleModeButton.setToolTip('捕捉比例尺模式')
         self.mSnappingScaleModeButton.setPopupMode(QToolButton.InstantPopup)
         scaleModeMenu = QMenu('设置捕捉比例尺模式', self)
-        self.mDefaultSnappingScaleAct = QAction(QgsApplication.getThemeIcon('/mIconSnappingOnScale.svg'), '禁用', scaleModeMenu)
+        self.mDefaultSnappingScaleAct = QAction(QgsApplication.getThemeIcon('/mIconSnappingOnScale.svg'), QCoreApplication.translate('QgsSnappingWidget', 'Disabled'), scaleModeMenu)
         self.mDefaultSnappingScaleAct.setToolTip('禁用比例尺依赖')
-        self.mGlobalSnappingScaleAct = QAction(QgsApplication.getThemeIcon('/mIconSnappingOnScale.svg'), '全局', scaleModeMenu)
+        self.mGlobalSnappingScaleAct = QAction(QgsApplication.getThemeIcon('/mIconSnappingOnScale.svg'), QCoreApplication.translate('QgsSnappingWidget', 'Global'), scaleModeMenu)
         self.mGlobalSnappingScaleAct.setToolTip('全局比例尺依赖')
         self.mPerLayerSnappingScaleAct = QAction(QgsApplication.getThemeIcon('/mIconSnappingOnScale.svg'), '逐图层', scaleModeMenu)
         self.mPerLayerSnappingScaleAct.setToolTip('逐图层比例尺依赖')

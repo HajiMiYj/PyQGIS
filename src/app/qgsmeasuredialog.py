@@ -2,7 +2,7 @@
 import math
 from pathlib import Path
 from qgis.PyQt import uic
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.PyQt.QtWidgets import QDialog, QDialogButtonBox, QTreeWidgetItem
 from qgis.core import Qgis, QgsDistanceArea, QgsProject, QgsSettings, QgsUnitTypes, QgsApplication
 
@@ -31,9 +31,9 @@ class QgsMeasureDialog(QDialog):
             choices = [(QgsUnitTypes.toString(unit), unit) for unit in (Qgis.DistanceUnit.Meters, Qgis.DistanceUnit.Kilometers, Qgis.DistanceUnit.Feet, Qgis.DistanceUnit.Miles, Qgis.DistanceUnit.NauticalMiles)]
         self.mUnitsCombo.clear()
         for label, value in choices: self.mUnitsCombo.addItem(label, value)
-        self.buttonBox.addButton('新建', QDialogButtonBox.ActionRole).clicked.connect(tool.restart)
-        self.buttonBox.addButton('复制', QDialogButtonBox.ActionRole).clicked.connect(self.copyMeasurements)
-        self.buttonBox.addButton('配置', QDialogButtonBox.ActionRole).clicked.connect(lambda: tool.mApp.options('地图工具'))
+        self.buttonBox.addButton(QCoreApplication.translate('QgsAppDirectoryItemGuiProvider', 'New'), QDialogButtonBox.ActionRole).clicked.connect(tool.restart)
+        self.buttonBox.addButton(QCoreApplication.translate('QgsMeasureDialog', 'Copy'), QDialogButtonBox.ActionRole).clicked.connect(self.copyMeasurements)
+        self.buttonBox.addButton(QCoreApplication.translate('QgsAuthConfigEditor', 'Config'), QDialogButtonBox.ActionRole).clicked.connect(lambda: tool.mApp.options('地图工具'))
         self.buttonBox.rejected.connect(self.reject)
         self.buttonBox.helpRequested.connect(lambda: tool.mApp.mActionHelpContents.trigger())
         self.mUnitsCombo.currentIndexChanged.connect(lambda: self.updateMeasurements(self.mLastPoints))

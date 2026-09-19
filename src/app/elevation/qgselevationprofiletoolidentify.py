@@ -1,5 +1,5 @@
 """Click/rectangle identification using native generated profile results."""
-from qgis.PyQt.QtCore import Qt, QPointF, QRectF
+from qgis.PyQt.QtCore import QCoreApplication, Qt, QPointF, QRectF
 from qgis.PyQt.QtWidgets import QRubberBand
 from qgis.gui import QgsPlotTool, QgsMapToolIdentify
 from qgis.core import QgsVectorLayer
@@ -47,7 +47,7 @@ class QgsElevationProfileToolIdentify(QgsPlotTool):
                 if feature is not None and feature.isValid():
                     entry = QgsMapToolIdentify.IdentifyResult(layer, feature, {str(k): str(v) for k, v in attributes.items()})
                 else:
-                    entry = QgsMapToolIdentify.IdentifyResult(layer, '高程剖面', {str(k): str(v) for k, v in attributes.items()}, {})
+                    entry = QgsMapToolIdentify.IdentifyResult(layer, QCoreApplication.translate('MainWindow', 'Elevation Profile'), {str(k): str(v) for k, v in attributes.items()}, {})
                 converted.append(entry)
         self.mApp.mMapTools['identify'].showIdentifyResults(converted)
 

@@ -1,5 +1,5 @@
 """Selection predicates and modifier behavior from qgsmaptoolselectutils.cpp."""
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.core import Qgis, QgsApplication, QgsCsException, QgsGeometry, QgsFeatureRequest, QgsVectorLayer
 
 
@@ -15,7 +15,7 @@ class QgsMapToolSelectUtils:
                 geometry = geometry.densifyByCount(9)
             geometry.transform(transform, Qgis.TransformDirection.Reverse)
         except QgsCsException as error:
-            QgsApplication.messageLog().logMessage(str(error), '选择', Qgis.Warning)
+            QgsApplication.messageLog().logMessage(str(error), QCoreApplication.translate('MainWindow', 'Select'), Qgis.Warning)
             return
         contains = bool(modifiers & Qt.AltModifier) and not single
         predicate = geometry.contains if contains else geometry.intersects

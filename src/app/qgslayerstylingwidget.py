@@ -1,5 +1,5 @@
 """Layer styling panel using native renderer widgets and style manager."""
-from qgis.PyQt.QtCore import Qt, QTimer
+from qgis.PyQt.QtCore import QCoreApplication, Qt, QTimer
 from qgis.PyQt.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QCheckBox, QPushButton, QLabel
 from qgis.core import QgsVectorLayer, QgsRasterLayer, QgsAnnotationLayer, QgsStyle
 from qgis.gui import QgsRendererPropertiesDialog, QgsMapLayerStyleManagerWidget, QgsSingleBandGrayRendererWidget, QgsSingleBandPseudoColorRendererWidget, QgsMultiBandColorRendererWidget, QgsPalettedRendererWidget, QgsHillshadeRendererWidget
@@ -20,10 +20,10 @@ class QgsLayerStylingWidget(QWidget):
         self.mLiveApplyCheck = QCheckBox('实时更新')
         self.mLiveApplyCheck.setChecked(True)
         layout.addWidget(self.mLiveApplyCheck)
-        button = QPushButton('应用')
+        button = QPushButton(QCoreApplication.translate('QgsFeatureFilterWidget', 'Apply'))
         button.clicked.connect(self.apply)
         layout.addWidget(button)
-        properties = QPushButton('图层属性…')
+        properties = QPushButton(QCoreApplication.translate('QgsIdentifyResultsDialog', 'Layer Properties…'))
         properties.clicked.connect(lambda: self.mApp.showLayerProperties(self.mLayer) if self.mLayer else None)
         layout.addWidget(properties)
     def setLayer(self, layer):
@@ -54,7 +54,7 @@ class QgsLayerStylingWidget(QWidget):
             self.mStackedWidget.addTab(self.mRendererWidget, '符号系统')
             self.mRendererWidget.widgetChanged.connect(self.autoApply)
         self.mStyleManager = QgsMapLayerStyleManagerWidget(layer, self.mApp.mMapCanvas, self)
-        self.mStackedWidget.addTab(self.mStyleManager, '样式')
+        self.mStackedWidget.addTab(self.mStyleManager, QCoreApplication.translate('DlgRenderingStyles', 'Style'))
     def setAnnotationItem(self, layer, itemId):
         self.setLayer(layer)
         self.mTimer.stop()

@@ -1,6 +1,6 @@
 import re
 from qgis.PyQt import uic
-from qgis.PyQt.QtCore import Qt, QRectF
+from qgis.PyQt.QtCore import QCoreApplication, Qt, QRectF
 from qgis.PyQt.QtGui import QPixmap, QPainter
 from qgis.PyQt.QtSvg import QSvgRenderer
 from qgis.PyQt.QtWidgets import QDialog, QMessageBox
@@ -107,7 +107,7 @@ class QgsDecorationImageDialog(QgsDecorationTitleDialog):
 
     def apply(self):
         if self.grpEnable.isChecked() and not self.mValidImage:
-            QMessageBox.warning(self, '图片装饰', '请等待图片下载完成或选择有效图片，也可以取消启用装饰。')
+            QMessageBox.warning(self, QCoreApplication.translate('QgsDecorationImageDialog', 'Image Decoration'), '请等待图片下载完成或选择有效图片，也可以取消启用装饰。')
             return False
         self.applyPlacement()
         self.copyGraphicSettings(self.mDeco)

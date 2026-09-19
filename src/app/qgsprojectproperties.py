@@ -1,4 +1,5 @@
 """Application project settings controller corresponding to qgsprojectproperties.cpp."""
+from qgis.PyQt.QtCore import QCoreApplication
 from qgis.PyQt.QtWidgets import QDialog, QVBoxLayout, QTabWidget, QWidget, QFormLayout, QLineEdit, QDialogButtonBox, QTableWidget, QTableWidgetItem
 from qgis.gui import QgsProjectionSelectionTreeWidget
 from qgis.core import QgsExpressionContextUtils
@@ -9,7 +10,7 @@ class QgsProjectProperties(QDialog):
         super().__init__(app)
         self.mApp = app
         self.setObjectName('QgsProjectProperties')
-        self.setWindowTitle('工程属性')
+        self.setWindowTitle(QCoreApplication.translate('QgsProjectPropertiesBase', 'Project Properties'))
         self.resize(800, 620)
         layout = QVBoxLayout(self)
         self.mOptionsStackedWidget = QTabWidget()
@@ -19,10 +20,10 @@ class QgsProjectProperties(QDialog):
         self.titleEdit = QLineEdit(app.mProject.title())
         self.mProjectHomeLineEdit = QLineEdit(app.mProject.presetHomePath())
         self.mEllipsoid = QLineEdit(app.mProject.ellipsoid())
-        form.addRow('工程标题', self.titleEdit)
-        form.addRow('工程主目录', self.mProjectHomeLineEdit)
+        form.addRow(QCoreApplication.translate('QgsProjectPropertiesBase', 'Project title'), self.titleEdit)
+        form.addRow(QCoreApplication.translate('QgsBrowserModel', 'Project Home'), self.mProjectHomeLineEdit)
         form.addRow('椭球体（例如 WGS84、NONE）', self.mEllipsoid)
-        self.mOptionsStackedWidget.addTab(general, '常规')
+        self.mOptionsStackedWidget.addTab(general, QCoreApplication.translate('Map3DConfigWidget', 'General'))
         self.mProjectionSelector = QgsProjectionSelectionTreeWidget()
         self.mProjectionSelector.setCrs(app.mProject.crs())
         self.mOptionsStackedWidget.addTab(self.mProjectionSelector, '坐标参考系')

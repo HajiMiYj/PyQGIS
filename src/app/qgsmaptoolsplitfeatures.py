@@ -1,5 +1,5 @@
 """Application geometry editing capture with the native CAD/snapping pipeline."""
-from qgis.core import Qgis, QgsGeometry, QgsFeatureRequest, QgsLineString, QgsVectorLayer, QgsProject, QgsCurvePolygon, QgsPointXY, QgsWkbTypes
+from qgis.core import Qgis, QgsGeometry, QgsFeatureRequest, QgsLineString, QgsVectorLayer, QgsProject, QgsCurvePolygon, QgsCurve, QgsPoint, QgsPointXY, QgsWkbTypes
 from qgis.PyQt.QtCore import Qt
 from qgis.gui import QgsMapToolCapture
 
@@ -44,12 +44,27 @@ class _GeometryEditCapture(QgsMapToolCapture):
                 success = result == Qgis.GeometryOperationResult.Success
             elif self.mOperation == 'addRing':
                 # The captured ring arrives as a surface with the polygon capture
-                # technique, but as a bare curve (QgsCompoundCurve) with the curve
-                # techniques, which has no exteriorRing().
+                # technique, as a bare curve (QgsCompoundCurve) with the curve
+                # techniques. QgsVectorLayer.addCurvedRing() accepts a QgsCurve
+                # only (the PyQGIS addRing overload resolves to the point
+                # sequence), so normalise whatever arrived into a curve.
                 captured = geometry.constGet()
-                ring = captured.exteriorRing().clone() if isinstance(captured, QgsCurvePolygon) else captured.clone()
-                result = layer.addCurvedRing(ring)
-                success = (result[0] if isinstance(result, tuple) else result) == Qgis.GeometryOperationResult.Success
+                ring = None
+                if isinstance(captured, QgsCurvePolygon):
+                    exterior = captured.exteriorRing()
+                    if exterior is not None:
+                        ring = exterior.clone()
+                elif isinstance(captured, QgsCurve):
+                    ring = captured.clone()
+                if ring is None:
+                    vertices = [QgsPoint(point) for point in captured.vertices()] if hasattr(captured, 'vertices') else []
+                    if len(vertices) < 3:
+                        success = False
+                    else:
+                        ring = QgsLineString(vertices)
+                if ring is not None:
+                    result = layer.addCurvedRing(ring)
+                    success = (result[0] if isinstance(result, tuple) else result) == Qgis.GeometryOperationResult.Success
             elif self.mOperation == 'addPart':
                 # The two point-list SIP overloads are ambiguous in 3.34. Pass
                 # the full native geometry to preserve curves, Z and M instead.

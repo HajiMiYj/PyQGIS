@@ -6,7 +6,7 @@ though everything it drives (QgsUserProfileManager, QgsNewNameDialog) is bound.
 from pathlib import Path
 
 from qgis.PyQt import uic
-from qgis.PyQt.QtCore import QSize, Qt
+from qgis.PyQt.QtCore import QCoreApplication, QSize, Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QDialog, QListWidgetItem, QMessageBox
 from qgis.core import QgsApplication
@@ -49,9 +49,9 @@ class QgsUserProfileSelectionDialog(QDialog):
     def onAddProfile(self):
         from qgis.gui import QgsNewNameDialog
         dialog = QgsNewNameDialog('', '', [], self.mManager.allProfiles(), Qt.CaseInsensitive, self)
-        dialog.setConflictingNameWarning('已存在同名配置')
+        dialog.setConflictingNameWarning(QCoreApplication.translate('QgsUserProfileSelectionDialog', 'A profile with this name already exists'))
         dialog.setOverwriteEnabled(False)
-        dialog.setHintString('新配置名称')
+        dialog.setHintString(QCoreApplication.translate('QgsUserProfileSelectionDialog', 'New profile name'))
         dialog.setWindowTitle('新建配置名称')
         # Prevent slashes and backslashes in the profile folder name.
         dialog.setRegularExpression('[^/\\\\]+')
@@ -66,4 +66,4 @@ class QgsUserProfileSelectionDialog(QDialog):
             item.setSelected(True)
             self.accept()
             return
-        QMessageBox.warning(self, '新建配置', f"无法创建文件夹 '{profileName}'")
+        QMessageBox.warning(self, QCoreApplication.translate('QgsUserProfileSelectionDialog', 'New Profile'), f"无法创建文件夹 '{profileName}'")

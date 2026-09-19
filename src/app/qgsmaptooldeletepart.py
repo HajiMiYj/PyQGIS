@@ -1,5 +1,5 @@
 """Delete the clicked multipart component; uses native geometry and edit buffer."""
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.core import QgsVectorLayer, QgsGeometry, QgsFeatureRequest, QgsRectangle, QgsPointXY, QgsWkbTypes
 from qgis.gui import QgsMapToolEdit
 
@@ -39,7 +39,7 @@ class QgsMapToolDeletePart(QgsMapToolEdit):
         geometry = feature.geometry()
         success = geometry.deleteRing(ringIndex, partIndex) if self.mDeleteRing else geometry.deletePart(partIndex)
         if not success: return False
-        layer.beginEditCommand('删除环' if self.mDeleteRing else '删除部件')
+        layer.beginEditCommand(QCoreApplication.translate('MainWindow', 'Delete Ring') if self.mDeleteRing else QCoreApplication.translate('QgsMapToolDeletePart', 'Delete part'))
         success = layer.changeGeometry(feature.id(), geometry)
         if success: layer.endEditCommand()
         else: layer.destroyEditCommand()

@@ -3,7 +3,7 @@
 Corresponds to src/app/qgsmaptoolmovefeature.cpp. Uses the native CAD event
 pipeline, snapping, feature edit buffer and a single undo command per move.
 """
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.PyQt.QtGui import QColor
 from qgis.core import (
     Qgis, QgsFeature, QgsFeatureRequest, QgsGeometry, QgsPointXY, QgsRectangle,
@@ -75,7 +75,7 @@ class QgsMapToolMoveFeature(QgsMapToolAdvancedDigitizing):
         featureIds = [feature.id() if hasattr(feature, 'id') else feature for feature in features]
         request = QgsFeatureRequest().setFilterFids(featureIds).setNoAttributes()
         features = list(layer.getFeatures(request))
-        layer.beginEditCommand('复制并移动要素' if self.mMode == self.CopyMove else '移动要素')
+        layer.beginEditCommand(QCoreApplication.translate('MainWindow', 'Copy and Move Feature(s)') if self.mMode == self.CopyMove else QCoreApplication.translate('QgsMapToolMoveFeature', 'Move feature'))
         success = True
         for feature in features:
             if self.mMode == self.CopyMove:

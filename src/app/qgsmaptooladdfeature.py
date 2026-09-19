@@ -1,4 +1,5 @@
 """Application completion policy around the native feature capture tool."""
+from qgis.PyQt.QtCore import QCoreApplication
 from qgis.PyQt import sip
 from qgis.core import (Qgis, QgsGeometry, QgsPoint, QgsCoordinateTransform,
                        QgsCsException, QgsExpressionContextUtils)
@@ -46,4 +47,4 @@ class QgsMapToolAddFeature(QgsMapToolDigitizeFeature):
             target.addTopologicalPoints(transformed)
             target.triggerRepaint()
         except QgsCsException as error:
-            self.mApp.mMessageBar.pushWarning('拓扑编辑', str(error))
+            self.mApp.mMessageBar.pushWarning(QCoreApplication.translate('QgsSnappingWidget', 'Topological Editing'), str(error))

@@ -1,5 +1,5 @@
 """Port of the application attribute-table controller, using native QgsDualView."""
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.PyQt.QtWidgets import QWidget, QVBoxLayout, QToolBar, QComboBox, QLineEdit, QLabel, QInputDialog, QMessageBox
 from qgis.PyQt.QtCore import QVariant
 from qgis.core import QgsFeatureRequest, QgsApplication, QgsSettings, QgsField
@@ -25,15 +25,15 @@ class QgsAttributeTableDialog(QWidget):
             action.setObjectName(name)
             self.mActions[name] = action
             action.triggered.connect(lambda checked=False, n=name: self.layerAction(n))
-        self.mToolbar.addAction(QgsApplication.getThemeIcon('/mActionCalculateField.svg'), '字段计算器', self.runFieldCalculator)
+        self.mToolbar.addAction(QgsApplication.getThemeIcon('/mActionCalculateField.svg'), QCoreApplication.translate('QObject', 'Field calculator'), self.runFieldCalculator)
         self.mActionAddAttribute = self.mToolbar.addAction(QgsApplication.getThemeIcon('/mActionNewAttribute.svg'), '新增字段', self.addAttribute)
-        self.mActionRemoveAttribute = self.mToolbar.addAction(QgsApplication.getThemeIcon('/mActionDeleteAttribute.svg'), '删除字段', self.removeAttribute)
-        self.mToolbar.addAction(QgsApplication.getThemeIcon('/mIconExpressionSelect.svg'), '按表达式选择', lambda: self.layerAction('mActionSelectByExpression'))
+        self.mActionRemoveAttribute = self.mToolbar.addAction(QgsApplication.getThemeIcon('/mActionDeleteAttribute.svg'), QCoreApplication.translate('QgsAttributeTableDialog', 'Delete field'), self.removeAttribute)
+        self.mToolbar.addAction(QgsApplication.getThemeIcon('/mIconExpressionSelect.svg'), QCoreApplication.translate('QgsExpressionSelectionDialogBase', 'Select by Expression'), lambda: self.layerAction('mActionSelectByExpression'))
         self.mActionSelectedToTop = self.mToolbar.addAction(QgsApplication.getThemeIcon('/mActionSelectedToTop.svg'), '选中要素置顶')
         self.mActionSelectedToTop.setCheckable(True)
-        self.mToolbar.addAction(QgsApplication.getThemeIcon('/mActionOpenTable.svg'), '表格视图', lambda: self.mMainView.setView(QgsDualView.AttributeTable))
-        self.mToolbar.addAction(QgsApplication.getThemeIcon('/mActionFormView.svg'), '表单视图', lambda: self.mMainView.setView(QgsDualView.AttributeEditor))
-        self.mToolbar.addAction(QgsApplication.getThemeIcon('/mActionRefresh.svg'), '重新加载', self.reload)
+        self.mToolbar.addAction(QgsApplication.getThemeIcon('/mActionOpenTable.svg'), QCoreApplication.translate('QgsAttributeTableDialog', 'Table View'), lambda: self.mMainView.setView(QgsDualView.AttributeTable))
+        self.mToolbar.addAction(QgsApplication.getThemeIcon('/mActionFormView.svg'), QCoreApplication.translate('QgsAttributeTableDialog', 'Form View'), lambda: self.mMainView.setView(QgsDualView.AttributeEditor))
+        self.mToolbar.addAction(QgsApplication.getThemeIcon('/mActionRefresh.svg'), QCoreApplication.translate('QgsCodeEditorHistoryDialogBase', 'Reload'), self.reload)
         self.mFilterButton = QComboBox()
         for text, value in [('全部要素', QgsAttributeTableFilterModel.ShowAll),
                             ('选中要素', QgsAttributeTableFilterModel.ShowSelected),
@@ -83,18 +83,18 @@ class QgsAttributeTableDialog(QWidget):
         name, ok = QInputDialog.getText(self, '新增字段', '字段名')
         if not ok or not name: return
         if self.mLayer.fields().lookupField(name) >= 0:
-            QMessageBox.warning(self, '字段', '名称已存在')
+            QMessageBox.warning(self, QCoreApplication.translate('QgsActionScopeRegistry', 'Field'), '名称已存在')
             return
-        kind, ok = QInputDialog.getItem(self, '字段类型', '类型', ['文本', '整数', '小数', '日期'], 0, False)
+        kind, ok = QInputDialog.getItem(self, QCoreApplication.translate('QObject', 'Field type'), QCoreApplication.translate('DBManagerPlugin', 'Type'), ['文本', '整数', '小数', '日期'], 0, False)
         if not ok: return
         types = {'文本': QVariant.String, '整数': QVariant.Int, '小数': QVariant.Double, '日期': QVariant.Date}
         self.mLayer.beginEditCommand('新增字段')
         if self.mLayer.addAttribute(QgsField(name, types[kind])): self.mLayer.endEditCommand()
         else: self.mLayer.destroyEditCommand()
     def removeAttribute(self):
-        name, ok = QInputDialog.getItem(self, '删除字段', '字段', self.mLayer.fields().names(), 0, False)
-        if ok and QMessageBox.question(self, '删除字段', f'删除 {name}？', QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.Yes:
-            self.mLayer.beginEditCommand('删除字段')
+        name, ok = QInputDialog.getItem(self, QCoreApplication.translate('QgsAttributeTableDialog', 'Delete field'), QCoreApplication.translate('QgsActionScopeRegistry', 'Field'), self.mLayer.fields().names(), 0, False)
+        if ok and QMessageBox.question(self, QCoreApplication.translate('QgsAttributeTableDialog', 'Delete field'), f'删除 {name}？', QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.Yes:
+            self.mLayer.beginEditCommand(QCoreApplication.translate('QgsAttributeTableDialog', 'Delete field'))
             if self.mLayer.deleteAttribute(self.mLayer.fields().lookupField(name)): self.mLayer.endEditCommand()
             else: self.mLayer.destroyEditCommand()
 
@@ -114,7 +114,7 @@ class QgsAttributeTableDialog(QWidget):
             return
         expr = QgsExpression(text)
         if expr.hasParserError():
-            self.mApp.mMessageBar.pushWarning('表达式', expr.parserErrorString())
+            self.mApp.mMessageBar.pushWarning(QCoreApplication.translate('Dialog', 'Expression'), expr.parserErrorString())
             return
         context = self.mLayer.createExpressionContext()
         ids = []
@@ -122,7 +122,7 @@ class QgsAttributeTableDialog(QWidget):
             context.setFeature(feature)
             result = expr.evaluate(context)
             if expr.hasEvalError():
-                self.mApp.mMessageBar.pushWarning('表达式', expr.evalErrorString())
+                self.mApp.mMessageBar.pushWarning(QCoreApplication.translate('Dialog', 'Expression'), expr.evalErrorString())
                 return
             if result:
                 ids.append(feature.id())

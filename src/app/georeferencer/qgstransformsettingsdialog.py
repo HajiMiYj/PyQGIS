@@ -1,3 +1,4 @@
+from qgis.PyQt.QtCore import QCoreApplication
 from pathlib import Path
 from qgis.PyQt import uic
 from qgis.PyQt.QtWidgets import QDialog, QMessageBox
@@ -76,14 +77,14 @@ class QgsTransformSettingsDialog(QDialog):
     def accept(self):
         output = (self.mRasterOutputFile if self.mRaster else self.mVectorOutputFile).filePath()
         if not self.mCrsSelector.crs().isValid():
-            QMessageBox.warning(self, '变换设置', '请选择有效的目标 CRS'); return
+            QMessageBox.warning(self, QCoreApplication.translate('QgsTransformSettingsDialog', 'Transformation Settings'), '请选择有效的目标 CRS'); return
         if not self.mWorldFileCheckBox.isChecked() and not output:
-            QMessageBox.warning(self, '变换设置', '请选择输出文件'); return
+            QMessageBox.warning(self, QCoreApplication.translate('QgsTransformSettingsDialog', 'Transformation Settings'), '请选择输出文件'); return
         # The native UI uses negative vertical pixel size; GDAL xRes/yRes
         # take positive magnitudes.
         resolution = (self.dsbHorizRes.value(), abs(self.dsbVerticalRes.value())) if self.cbxUserResolution.isChecked() and self.mRaster else None
         if resolution and min(resolution) <= 0:
-            QMessageBox.warning(self, '变换设置', '目标分辨率必须为正数'); return
+            QMessageBox.warning(self, QCoreApplication.translate('QgsTransformSettingsDialog', 'Transformation Settings'), '目标分辨率必须为正数'); return
         self.mSettings.update(method=self.cmbTransformType.currentData(), crs=QgsCoordinateReferenceSystem(self.mCrsSelector.crs()),
                               output=output, resampling=self.cmbResampling.currentData(), compression=self.cmbCompressionComboBox.currentText(),
                               load=self.cbxLoadInProjectsWhenDone.isChecked(), saveGcp=self.saveGcpCheckBox.isChecked(),

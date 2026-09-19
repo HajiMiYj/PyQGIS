@@ -1,5 +1,5 @@
 """Canvas feature actions with native QgsAction execution and click context."""
-from qgis.PyQt.QtCore import Qt, QPoint
+from qgis.PyQt.QtCore import QCoreApplication, Qt, QPoint
 from qgis.PyQt.QtWidgets import QMenu
 from qgis.core import Qgis, QgsVectorLayer, QgsFeatureRequest, QgsRectangle, QgsCsException, QgsExpression, QgsExpressionContextUtils, QgsExpressionContextScope
 from qgis.gui import QgsMapTool, QgsGui, QgsMapLayerActionContext
@@ -33,7 +33,7 @@ class QgsMapToolFeatureAction(QgsMapTool):
             context.setFeature(feature)
             action = menu.addAction(str(expression.evaluate(context) or feature.id()))
             action.triggered.connect(lambda checked=False, f=feature: self.doActionForFeature(layer, f, point))
-        menu.addAction('所有要素', lambda: [self.doActionForFeature(layer, f, point) for f in features])
+        menu.addAction(QCoreApplication.translate('QgsMapToolFeatureAction', 'All Features'), lambda: [self.doActionForFeature(layer, f, point) for f in features])
         menu.exec_(self.canvas().mapToGlobal(QPoint(x+5, y+5)))
         menu.deleteLater()
         return True

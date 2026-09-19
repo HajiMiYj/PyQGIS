@@ -1,5 +1,5 @@
 from qgis.PyQt import uic
-from qgis.PyQt.QtCore import QSignalBlocker
+from qgis.PyQt.QtCore import QCoreApplication, QSignalBlocker
 from qgis.PyQt.QtWidgets import QDialog, QMessageBox
 from qgis.core import QgsApplication, QgsLayoutItemPage, QgsLayoutSize, QgsLayoutMeasurementConverter, Qgis
 from qgis.gui import QgsGui
@@ -16,10 +16,10 @@ class QgsElevationProfilePdfExportDialog(QDialog):
         self.mConverter = QgsLayoutMeasurementConverter()
         self.mSettingPresetSize = False
         QgsGui.enableAutoGeometryRestore(self)
-        self.mPageOrientationComboBox.addItem('纵向', QgsLayoutItemPage.Portrait)
-        self.mPageOrientationComboBox.addItem('横向', QgsLayoutItemPage.Landscape)
+        self.mPageOrientationComboBox.addItem(QCoreApplication.translate('QgsElevationProfilePdfExportDialog', 'Portrait'), QgsLayoutItemPage.Portrait)
+        self.mPageOrientationComboBox.addItem(QCoreApplication.translate('QgsElevationProfilePdfExportDialog', 'Landscape'), QgsLayoutItemPage.Landscape)
         for size in QgsApplication.pageSizeRegistry().entries(): self.mPageSizeComboBox.addItem(size.displayName, size.name)
-        self.mPageSizeComboBox.addItem('自定义', '')
+        self.mPageSizeComboBox.addItem(QCoreApplication.translate('QgsElevationProfilePdfExportDialog', 'Custom'), '')
         self.mSizeUnitsComboBox.setUnit(Qgis.LayoutUnit.Millimeters)
         self.mSizeUnitsComboBox.setConverter(self.mConverter)
         self.mSizeUnitsComboBox.linkToWidget(self.mWidthSpin)
@@ -73,6 +73,6 @@ class QgsElevationProfilePdfExportDialog(QDialog):
         size = self.pageSizeMM()
         if size.width() <= 0 or size.height() <= 0: error = '页面宽高必须大于零'
         if error:
-            QMessageBox.warning(self, '导出设置', error)
+            QMessageBox.warning(self, QCoreApplication.translate('QgsLayoutWidgetBase', 'Export Settings'), error)
             return
         super().accept()

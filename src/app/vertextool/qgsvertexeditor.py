@@ -1,6 +1,6 @@
 """Vertex coordinate model/dock counterparts of vertextool/qgsvertexeditor.cpp."""
 from math import isfinite
-from qgis.PyQt.QtCore import Qt, QAbstractTableModel, QModelIndex, pyqtSignal
+from qgis.PyQt.QtCore import QCoreApplication, Qt, QAbstractTableModel, QModelIndex, pyqtSignal
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtWidgets import QWidget, QVBoxLayout, QLabel, QTableView, QToolBar, QAbstractItemView, QApplication, QHeaderView
 from qgis.core import QgsProject, QgsPointXY, QgsWkbTypes, QgsCoordinateTransform
@@ -92,7 +92,7 @@ class QgsVertexEditor(QgsDockWidget):
         self.mHint = QLabel('用顶点工具点击要素；坐标使用图层 CRS。', self)
         self.mHint.setWordWrap(True)
         toolbar = QToolBar(self)
-        toolbar.addAction('复制坐标', self.copyVertices)
+        toolbar.addAction(QCoreApplication.translate('QgsMapCanvas', 'Copy Coordinate'), self.copyVertices)
         toolbar.addAction('定位选中顶点', self.zoomToSelected)
         content = QWidget(self)
         layout = QVBoxLayout(content)

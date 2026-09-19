@@ -8,7 +8,7 @@ from pathlib import Path
 import traceback
 from functools import partial
 from qgis.PyQt import uic, sip
-from qgis.PyQt.QtCore import Qt, QTimer, QUrl, QSize, QEvent
+from qgis.PyQt.QtCore import QCoreApplication, Qt, QTimer, QUrl, QSize, QEvent
 
 # Native qgisapp.h: 24 on non-macOS builds, 32 on macOS.
 QGIS_ICON_SIZE = 24
@@ -271,11 +271,11 @@ class QgisApp(QMainWindow):
         self.setCentralWidget(container)
 
     def createMenus(self):
-        self.mPanelMenu = self.mViewMenu.addMenu('面板')
+        self.mPanelMenu = self.mViewMenu.addMenu(QCoreApplication.translate('QgisApp', 'Panels'))
         self.mPanelMenu.setObjectName('mPanelMenu')
-        self.mToolbarMenu = self.mViewMenu.addMenu('工具栏')
+        self.mToolbarMenu = self.mViewMenu.addMenu(QCoreApplication.translate('QgisApp', 'Toolbars'))
         self.mToolbarMenu.setObjectName('mToolbarMenu')
-        self.mDatabaseMenu = QMenu('数据库', self)
+        self.mDatabaseMenu = QMenu(QCoreApplication.translate('ImportIntoSpatialite', 'Database'), self)
         self.mWebMenu = QMenu('Web', self)
         self.menuBar().insertMenu(self.mHelpMenu.menuAction(), self.mDatabaseMenu)
         self.menuBar().insertMenu(self.mHelpMenu.menuAction(), self.mWebMenu)
@@ -345,7 +345,7 @@ class QgisApp(QMainWindow):
         self.mRotationEdit.valueChanged.connect(self.mMapCanvas.setRotation)
         self.mMapCanvas.rotationChanged.connect(self.showRotation)
         self.mRotationEdit.setValue(self.mMapCanvas.rotation())
-        self.mRotationLabel = QLabel('旋转', self.mStatusBar)
+        self.mRotationLabel = QLabel(QCoreApplication.translate('QObject', 'Rotate'), self.mStatusBar)
         self.mRotationLabel.setObjectName('mRotationLabel')
         self.mRotationLabel.setMinimumWidth(10)
         self.mRotationLabel.setMargin(3)
@@ -353,7 +353,7 @@ class QgisApp(QMainWindow):
         self.mRotationLabel.setToolTip(self.mRotationEdit.toolTip())
         self.mStatusBar.addPermanentWidget(self.mRotationLabel)
         self.mStatusBar.addPermanentWidget(self.mRotationEdit)
-        self.mRenderSuppressionCBox = QCheckBox('渲染')
+        self.mRenderSuppressionCBox = QCheckBox(QCoreApplication.translate('QgisApp', 'Render'))
         self.mRenderSuppressionCBox.setObjectName('mRenderSuppressionCBox')
         self.mRenderSuppressionCBox.setToolTip('开启或暂停地图渲染')
         self.mRenderSuppressionCBox.setChecked(self.mMapCanvas.renderFlag())
@@ -469,7 +469,7 @@ class QgisApp(QMainWindow):
         from .qgsmapthemes import QgsMapThemes
         from qgis.gui import QgsLegendFilterButton
         self.mMapThemes = QgsMapThemes(self)
-        self.mActionStyleDock = QAction(QgsApplication.getThemeIcon('/propertyicons/symbology.svg'), '图层样式', self)
+        self.mActionStyleDock = QAction(QgsApplication.getThemeIcon('/propertyicons/symbology.svg'), QCoreApplication.translate('QgisApp', 'Layer Styling'), self)
         self.mActionStyleDock.setObjectName('mActionStyleDock')
         self.mActionStyleDock.setCheckable(True)
         self.mActionStyleDock.setShortcut('F7')
@@ -477,28 +477,28 @@ class QgisApp(QMainWindow):
         self.mActionStyleDock.toggled.connect(self.mapStyleDock)
         self.mLayerTreeToolBar.addAction(self.mActionStyleDock)
         self.actionAddGroup = self.mLayerTreeToolBar.addAction(QgsApplication.getThemeIcon('/mActionAddGroup.svg'),
-                                                               '添加组', defaults.addGroup)
+                                                               QCoreApplication.translate('QgisApp', 'Add Group'), defaults.addGroup)
         self.mVisibilityPresetsButton = QToolButton()
-        self.mVisibilityPresetsButton.setToolTip('管理地图主题')
+        self.mVisibilityPresetsButton.setToolTip(QCoreApplication.translate('QgisApp', 'Manage Map Themes'))
         self.mVisibilityPresetsButton.setIcon(QgsApplication.getThemeIcon('/mActionShowAllLayers.svg'))
         self.mVisibilityPresetsButton.setPopupMode(QToolButton.InstantPopup)
         self.mVisibilityPresetsButton.setMenu(self.mMapThemes.menu())
         self.mLayerTreeToolBar.addWidget(self.mVisibilityPresetsButton)
         self.mFilterLegendToolButton = QToolButton()
-        self.mFilterLegendToolButton.setToolTip('过滤图例')
+        self.mFilterLegendToolButton.setToolTip(QCoreApplication.translate('QgisApp', 'Filter Legend'))
         self.mFilterLegendToolButton.setIcon(QgsApplication.getThemeIcon('/mActionFilter2.svg'))
         self.mFilterLegendToolButton.setPopupMode(QToolButton.InstantPopup)
         menu = QMenu(self)
         self.mFilterLegendToolButton.setMenu(menu)
-        self.mFilterLegendByMapContentAction = menu.addAction('按地图内容过滤图例')
+        self.mFilterLegendByMapContentAction = menu.addAction(QCoreApplication.translate('QgisApp', 'Filter Legend by Map Content'))
         self.mFilterLegendByMapContentAction.setCheckable(True)
         self.mFilterLegendByMapContentAction.toggled.connect(self.updateFilterLegend)
-        self.mFilterLegendToggleShowPrivateLayersAction = menu.addAction('显示私有图层')
+        self.mFilterLegendToggleShowPrivateLayersAction = menu.addAction(QCoreApplication.translate('QgisApp', 'Show Private Layers'))
         self.mFilterLegendToggleShowPrivateLayersAction.setCheckable(True)
         self.mFilterLegendToggleShowPrivateLayersAction.toggled.connect(self.mLayerTreeView.setShowPrivateLayers)
         self.mLayerTreeToolBar.addWidget(self.mFilterLegendToolButton)
         self.mLegendExpressionFilterButton = QgsLegendFilterButton(self)
-        self.mLegendExpressionFilterButton.setToolTip('按表达式过滤图例')
+        self.mLegendExpressionFilterButton.setToolTip(QCoreApplication.translate('QgisApp', 'Filter legend by expression'))
         self.mLegendExpressionFilterButton.toggled.connect(self.toggleFilterLegendByExpression)
         self.mLegendExpressionFilterButton.expressionTextChanged.connect(
             lambda: self.toggleFilterLegendByExpression(self.mLegendExpressionFilterButton.isChecked()))
@@ -517,12 +517,12 @@ class QgisApp(QMainWindow):
         self.mMapCanvas.extentsChanged.connect(self.updateFilterLegend)
         layout.addWidget(self.mLayerTreeToolBar)
         layout.addWidget(self.mLayerTreeView)
-        self.mLayerTreeDock = self.dock('Layers', '图层', container, Qt.LeftDockWidgetArea, True)
+        self.mLayerTreeDock = self.dock('Layers', QCoreApplication.translate('QgisApp', 'Layers'), container, Qt.LeftDockWidgetArea, True)
 
     def createDockWidgets(self):
         self.mBrowserModel = QgsBrowserGuiModel(self)
         self.mBrowserModel.initialize()
-        self.mBrowserWidget = QgsBrowserDockWidget('浏览器', self.mBrowserModel, self)
+        self.mBrowserWidget = QgsBrowserDockWidget(QCoreApplication.translate('QgisApp', 'Browser'), self.mBrowserModel, self)
         self.mBrowserWidget.setObjectName('Browser')
         self.mBrowserWidget.setDisabledDataItemsKeys(['gpx'])
         self.mBrowserWidget.setMessageBar(self.mMessageBar)
@@ -536,16 +536,16 @@ class QgisApp(QMainWindow):
         self.mPanelMenu.addAction(self.mAdvancedDigitizingDockWidget.toggleViewAction())
         self.mAdvancedDigitizingDockWidget.hide()
         self.mUndoWidget = QUndoView(self)
-        self.mUndoDock = self.dock('Undo', '撤销/重做', self.mUndoWidget)
+        self.mUndoDock = self.dock('Undo', QCoreApplication.translate('QgisApp', 'Undo/Redo'), self.mUndoWidget)
         self.mLogViewer = QgsMessageLogViewer(self)
-        self.mLogDock = self.dock('MessageLog', '日志消息', self.mLogViewer, Qt.BottomDockWidgetArea)
+        self.mLogDock = self.dock('MessageLog', QCoreApplication.translate('QgisApp', 'Log Messages'), self.mLogViewer, Qt.BottomDockWidgetArea)
         self.mMessageButton.toggled.connect(self.mLogDock.setVisible)
         self.mLogDock.visibilityChanged.connect(self.mMessageButton.setChecked)
         self.mLogDock.visibilityChanged.connect(lambda visible: self.toggleLogMessageIcon(False) if visible else None)
         QgsApplication.messageLog().messageReceived[bool].connect(self.toggleLogMessageIcon)
         # QgsMessageLogViewer creates tabs on the first message for each tag.
-        QgsApplication.messageLog().logMessage('QGIS Python 已启动', '通用', Qgis.Info)
-        QgsApplication.messageLog().logMessage('Python 插件宿主已初始化', '插件', Qgis.Info)
+        QgsApplication.messageLog().logMessage('QGIS Python 已启动', QCoreApplication.translate('ConfigDialog', 'General'), Qgis.Info)
+        QgsApplication.messageLog().logMessage('Python 插件宿主已初始化', QCoreApplication.translate('QgsProcessingMapLayerParameterDefinitionWidget', 'Plugin'), Qgis.Info)
         self.mTemporalControllerWidget = QgsTemporalControllerWidget(self)
         self.mTemporalControllerDock = self.dock('TemporalController', '时间控制器', self.mTemporalControllerWidget,
                                                  Qt.BottomDockWidgetArea)
@@ -560,7 +560,7 @@ class QgisApp(QMainWindow):
                                                self.mIdentifyResults.expandAll)
         self.mIdentifyResultsToolBar.addAction(QgsApplication.getThemeIcon('/mActionCollapseTree.svg'), '折叠全部',
                                                self.mIdentifyResults.collapseAll)
-        self.mIdentifyResultsToolBar.addAction(QgsApplication.getThemeIcon('/mActionDeleteSelected.svg'), '清除',
+        self.mIdentifyResultsToolBar.addAction(QgsApplication.getThemeIcon('/mActionDeleteSelected.svg'), QCoreApplication.translate('QgsAuthConfigEdit', 'Clear'),
                                                self.mIdentifyResults.clear)
         self.mIdentifyResultsToolBar.addAction(QgsApplication.getThemeIcon('/mActionEditCopy.svg'), '复制选中值',
                                                self.copyIdentifyValue)
@@ -570,9 +570,9 @@ class QgisApp(QMainWindow):
                                                self.openIdentifyForm)
         identifyLayout.addWidget(self.mIdentifyResultsToolBar)
         identifyLayout.addWidget(self.mIdentifyResults)
-        self.mIdentifyResultsDock = self.dock('IdentifyResults', '识别结果', identifyContainer)
+        self.mIdentifyResultsDock = self.dock('IdentifyResults', QCoreApplication.translate('QgsIdentifyResultsBase', 'Identify Results'), identifyContainer)
         self.mLayerOrderWidget = QgsCustomLayerOrderWidget(self.mLayerTreeCanvasBridge, self)
-        self.mLayerOrderDock = self.dock('LayerOrder', '图层顺序', self.mLayerOrderWidget)
+        self.mLayerOrderDock = self.dock('LayerOrder', QCoreApplication.translate('QgisApp', 'Layer Order'), self.mLayerOrderWidget)
         self.mOverviewCanvas = QgsMapOverviewCanvas(self, self.mMapCanvas)
         self.mLayerTreeCanvasBridge.setOverviewCanvas(self.mOverviewCanvas)
         self.mOverviewDock = self.dock('Overview', '概览', self.mOverviewCanvas, Qt.LeftDockWidgetArea)
@@ -581,7 +581,7 @@ class QgisApp(QMainWindow):
         self.mBookmarksView = QTableView(self)
         self.mBookmarksView.setModel(self.mBookmarksModel)
         self.mBookmarksView.doubleClicked.connect(self.zoomToBookmark)
-        self.mBookmarksDock = self.dock('Bookmarks', '空间书签', self.mBookmarksView)
+        self.mBookmarksDock = self.dock('Bookmarks', QCoreApplication.translate('QObject', 'Spatial Bookmarks'), self.mBookmarksView)
         from .vertextool.qgsvertexeditor import QgsVertexEditor
         self.mVertexEditorDock = QgsVertexEditor(self.mMapCanvas, self)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.mVertexEditorDock)
@@ -597,7 +597,7 @@ class QgisApp(QMainWindow):
         if not hasattr(self, 'mLayerStylingWidget'):
             from .qgslayerstylingwidget import QgsLayerStylingWidget
             self.mLayerStylingWidget = QgsLayerStylingWidget(self)
-            self.mMapStylingDock = self.dock('LayerStyling', '图层样式', self.mLayerStylingWidget)
+            self.mMapStylingDock = self.dock('LayerStyling', QCoreApplication.translate('QgisApp', 'Layer Styling'), self.mLayerStylingWidget)
             self.mMapStylingDock.visibilityChanged.connect(self.mActionStyleDock.setChecked)
         self.mLayerStylingWidget.setLayer(self.activeLayer())
         self.mMapStylingDock.setVisible(visible)
@@ -685,7 +685,7 @@ class QgisApp(QMainWindow):
         self.mMapTools['offsetPointSymbol'] = QgsMapToolOffsetPointSymbol(canvas)
         for key in ('rotatePointSymbols', 'offsetPointSymbol'):
             self.mMapTools[key].messageEmitted.connect(
-                lambda message, level: self.mMessageBar.pushMessage('点符号', message, level=level))
+                lambda message, level: self.mMessageBar.pushMessage(QCoreApplication.translate('QgsPointCloud3DSymbolWidget', 'Point Symbol'), message, level=level))
         from .labeling.qgsmaptoolpinlabels import QgsMapToolPinLabels
         from .labeling.qgsmaptoolshowhidelabels import QgsMapToolShowHideLabels
         from .labeling.qgsmaptoolmovelabel import QgsMapToolMoveLabel
@@ -696,10 +696,10 @@ class QgisApp(QMainWindow):
                          ('changeLabelProperties', QgsMapToolChangeLabelProperties)]:
             self.mMapTools[key] = cls(canvas, self.mAdvancedDigitizingDockWidget)
             self.mMapTools[key].messageEmitted.connect(
-                lambda message, level: self.mMessageBar.pushMessage('标注', message, level=level))
+                lambda message, level: self.mMessageBar.pushMessage(QCoreApplication.translate('QObject', 'Label'), message, level=level))
         for key in ('fillRing', 'featureAction'):
             self.mMapTools[key].messageEmitted.connect(
-                lambda message, level: self.mMessageBar.pushMessage('要素', message, level=level))
+                lambda message, level: self.mMessageBar.pushMessage(QCoreApplication.translate('QObject', 'feature'), message, level=level))
         from .qgsmaptoolselectionhandler import QgsMapToolSelectionHandler
         for key, mode in [('selectPolygon', QgsMapToolSelectionHandler.SelectPolygon),
                           ('selectFreehand', QgsMapToolSelectionHandler.SelectFreehand),
@@ -1007,7 +1007,7 @@ class QgisApp(QMainWindow):
             self.mMapToolActionGroup.addAction(action)
             self.mMapTools[tool].setAction(action)
             self.bind('mAction' + name, partial(self.setMapTool, tool), requirement)
-        self.menuAllEdits = QMenu('当前编辑', self)
+        self.menuAllEdits = QMenu(QCoreApplication.translate('QgisApp', 'Current Edits'), self)
         self.menuAllEdits.setObjectName('AllEditsMenu')
         for name in ('SaveEdits', 'RollbackEdits', 'CancelEdits', None, 'SaveAllEdits', 'RollbackAllEdits',
                      'CancelAllEdits'):
@@ -1036,7 +1036,7 @@ class QgisApp(QMainWindow):
         self.openProfileFolderAction.setObjectName('openProfileFolderAction')
         self.openProfileFolderAction.triggered.connect(
             lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(QgsApplication.qgisSettingsDirPath())))
-        self.mConfigMenu = self.mSettingsMenu.addMenu('用户配置')
+        self.mConfigMenu = self.mSettingsMenu.addMenu(QCoreApplication.translate('QgsUserProfileOptionsFactory', 'User Profiles'))
         self.newProfileAction = QAction('新建配置…', self)
         self.newProfileAction.setObjectName('newProfileAction')
         self.newProfileAction.triggered.connect(self.newProfile)
@@ -1707,7 +1707,7 @@ class QgisApp(QMainWindow):
 
     def addMapLayer(self, layer):
         if not layer or not layer.isValid():
-            self.mMessageBar.pushCritical('加载失败', layer.source() if layer else '无效图层')
+            self.mMessageBar.pushCritical('加载失败', layer.source() if layer else QCoreApplication.translate('QgisApp', 'Invalid layer'))
             return None
         added = self.mProject.addMapLayer(layer)
         self.setActiveLayer(added)
@@ -1744,7 +1744,7 @@ class QgisApp(QMainWindow):
                    QgsMapLayerType.PointCloudLayer: self.addPointCloudLayer}
         if layerType == QgsMapLayerType.VectorTileLayer: return self.addVectorTileLayer(uri, name)
         if layerType in loaders: return loaders[layerType](uri, name, provider)
-        self.mMessageBar.pushWarning('数据类型', f'尚未移植图层类型 {layerType}')
+        self.mMessageBar.pushWarning(QCoreApplication.translate('QgsHanaTableModel', 'Data Type'), f'尚未移植图层类型 {layerType}')
 
     def handleDropUriList(self, uris):
         for uri in uris:
@@ -1793,7 +1793,7 @@ class QgisApp(QMainWindow):
             elif isinstance(layer, QgsMeshLayer) and layer.isEditable():
                 if not self.mMeshEditTool.stopEditing(layer): return False
         if self.mProject.isDirty():
-            answer = QMessageBox.question(self, '保存工程', '工程已修改。是否保存？',
+            answer = QMessageBox.question(self, QCoreApplication.translate('QgisApp', 'Save Project'), '工程已修改。是否保存？',
                                           QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel, QMessageBox.Save)
             if answer == QMessageBox.Cancel: return False
             if answer == QMessageBox.Save: return self.fileSave()
@@ -1859,7 +1859,7 @@ class QgisApp(QMainWindow):
         template = str(Path(QgsApplication.qgisSettingsDirPath()) / 'project_default.qgs')
         if Path(template).exists() and self.fileNewFromTemplate(template):
             return
-        self.mMessageBar.pushWarning('打开模板工程', f'默认模板不可用：{template}')
+        self.mMessageBar.pushWarning(QCoreApplication.translate('QgisApp', 'Open Template Project'), f'默认模板不可用：{template}')
 
     def userProfileManager(self):
         return self.mUserProfileManager
@@ -1882,13 +1882,13 @@ class QgisApp(QMainWindow):
         # another instance on it (QgsUserProfileManager::loadUserProfile()).
         manager = self.mUserProfileManager
         if manager is None:
-            self.mMessageBar.pushWarning('新建配置', '当前启动方式没有可用的配置档案目录。')
+            self.mMessageBar.pushWarning(QCoreApplication.translate('QgisApp', 'New Profile'), '当前启动方式没有可用的配置档案目录。')
             return
         from qgis.gui import QgsNewNameDialog
         dialog = QgsNewNameDialog('', '', [], manager.allProfiles(), Qt.CaseInsensitive, self)
-        dialog.setConflictingNameWarning('已存在同名配置')
+        dialog.setConflictingNameWarning(QCoreApplication.translate('QgisApp', 'A profile with this name already exists'))
         dialog.setOverwriteEnabled(False)
-        dialog.setHintString('新配置名称')
+        dialog.setHintString(QCoreApplication.translate('QgisApp', 'New Profile Name'))
         dialog.setWindowTitle('新建配置名称')
         dialog.setRegularExpression('[^/\\\\]+')
         if dialog.exec_() != QDialog.Accepted:
@@ -1898,7 +1898,7 @@ class QgisApp(QMainWindow):
         if error.isEmpty():
             self.loadUserProfile(profileName)
             return
-        QMessageBox.warning(self, '新建配置', f"无法创建文件夹 '{profileName}'")
+        QMessageBox.warning(self, QCoreApplication.translate('QgisApp', 'New Profile'), f"无法创建文件夹 '{profileName}'")
 
     def loadUserProfile(self, name):
         """Native QgsUserProfileManager::loadUserProfile().
@@ -1925,7 +1925,7 @@ class QgisApp(QMainWindow):
         QgsApplication.exit(0)
 
     def fileOpen(self):
-        path, _ = QFileDialog.getOpenFileName(self, '打开工程', '', 'QGIS 工程 (*.qgz *.qgs)')
+        path, _ = QFileDialog.getOpenFileName(self, QCoreApplication.translate('QgisApp', 'Open Project'), '', 'QGIS 工程 (*.qgz *.qgs)')
         if path: return self.addProject(path)
 
     def addProject(self, path):
@@ -1964,7 +1964,7 @@ class QgisApp(QMainWindow):
         return self.writeProject(self.mProject.fileName())
 
     def fileSaveAs(self):
-        path, _ = QFileDialog.getSaveFileName(self, '保存工程', self.mProject.fileName(),
+        path, _ = QFileDialog.getSaveFileName(self, QCoreApplication.translate('QgisApp', 'Save Project'), self.mProject.fileName(),
                                               'QGIS 压缩工程 (*.qgz);;QGIS 工程 (*.qgs)')
         if not path: return False
         if not Path(path).suffix: path += '.qgz'
@@ -2166,7 +2166,7 @@ class QgisApp(QMainWindow):
         # layer.type() already yields the value the dialog expects.
         dialog = QgsDataSourceSelectDialog(self.mBrowserModel, True, layer.type())
         if not layer.isValid():
-            dialog.setWindowTitle('修复数据源')
+            dialog.setWindowTitle(QCoreApplication.translate('QgisApp', 'Repair Data Source'))
         publicSource = getattr(layer, 'publicSource', lambda: layer.source())()
         sourceParts = QgsProviderRegistry.instance().decodeUri(layer.providerType(), publicSource)
         source = publicSource
@@ -2264,7 +2264,7 @@ class QgisApp(QMainWindow):
         from .decorations.qgsdecorationoverlay import QgsDecorationOverlay
         canvas._decorationOverlay = QgsDecorationOverlay(canvas, self)
         self.mAdditionalCanvases.append(canvas)
-        return self.dock(f'MapCanvas{len(self.mAdditionalCanvases)}', '地图视图', canvas, visible=True)
+        return self.dock(f'MapCanvas{len(self.mAdditionalCanvases)}', QCoreApplication.translate('QgisApp', 'Map Views'), canvas, visible=True)
 
     def removeLayer(self):
         nodes = self.mLayerTreeView.selectedNodes(True)
@@ -2273,7 +2273,7 @@ class QgisApp(QMainWindow):
             for layer in layers:
                 if isinstance(layer, QgsVectorLayer) and not self.mVectorLayerTools.stopEditing(layer): return
                 if isinstance(layer, QgsMeshLayer) and not self.mMeshEditTool.stopEditing(layer): return
-        if nodes and QMessageBox.question(self, '移除', f'移除选中的 {len(nodes)} 个图层/组？',
+        if nodes and QMessageBox.question(self, QCoreApplication.translate('DBTree', 'Remove'), f'移除选中的 {len(nodes)} 个图层/组？',
                                           QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.Yes:
             for node in nodes:
                 if node.parent(): node.parent().removeChildNode(node)
@@ -2405,7 +2405,7 @@ class QgisApp(QMainWindow):
         dlg = QDialog(self)
         dlg.setWindowTitle('比例尺可见性')
         form = QFormLayout(dlg)
-        enabled = QCheckBox('启用')
+        enabled = QCheckBox(QCoreApplication.translate('DBManagerPlugin', 'Enabled'))
         enabled.setChecked(layer.hasScaleBasedVisibility())
         minimum, maximum = QDoubleSpinBox(), QDoubleSpinBox()
         for widget in (minimum, maximum): widget.setRange(0, 1e12)
@@ -2545,16 +2545,16 @@ class QgisApp(QMainWindow):
     def runSimplifyFeature(self):
         layer = self.vectorLayer()
         if not layer: return False
-        tolerance, ok = QInputDialog.getDouble(self, '简化要素', '容差（图层单位）', 1.0, 0.0, 1e12, 6)
+        tolerance, ok = QInputDialog.getDouble(self, QCoreApplication.translate('MainWindow', 'Simplify Feature'), '容差（图层单位）', 1.0, 0.0, 1e12, 6)
         if ok: return self.geometryEditTool().simplifyFeature(tolerance)
         return False
 
     def runRotateFeature(self):
-        angle, ok = QInputDialog.getDouble(self, '旋转要素', '旋转角度（度）', 90.0, -360.0, 360.0, 3)
+        angle, ok = QInputDialog.getDouble(self, QCoreApplication.translate('QgsMapToolRotateFeature', 'Rotate feature'), '旋转角度（度）', 90.0, -360.0, 360.0, 3)
         return self.geometryEditTool().rotateFeature(angle) if ok else False
 
     def runScaleFeature(self):
-        factor, ok = QInputDialog.getDouble(self, '缩放要素', '缩放比例', 1.0, 0.0001, 1e6, 4)
+        factor, ok = QInputDialog.getDouble(self, QCoreApplication.translate('QgsMapToolScaleFeature', 'Scale feature'), QCoreApplication.translate('QgsPercentageNumericFormatWidgetBase', 'Scaling'), 1.0, 0.0001, 1e6, 4)
         return self.geometryEditTool().scaleFeature(factor) if ok else False
 
     def runDeleteRing(self):
@@ -2576,7 +2576,7 @@ class QgisApp(QMainWindow):
     def mergeAttributesOfSelectedFeatures(self, values):
         layer = self.vectorLayer()
         if not layer or not layer.isEditable(): return False
-        layer.beginEditCommand('合并要素属性')
+        layer.beginEditCommand(QCoreApplication.translate('QgisApp', 'Merged feature attributes'))
         success = all(layer.changeAttributeValues(fid, values) for fid in layer.selectedFeatureIds())
         if success:
             layer.endEditCommand()
@@ -2591,7 +2591,7 @@ class QgisApp(QMainWindow):
     def runOffsetCurve(self):
         layer = self.vectorLayer()
         if not layer: return False
-        distance, ok = QInputDialog.getDouble(self, '偏移曲线', '偏移距离（图层单位）', 1.0, -1e12, 1e12, 6)
+        distance, ok = QInputDialog.getDouble(self, QCoreApplication.translate('MainWindow', 'Offset Curve'), '偏移距离（图层单位）', 1.0, -1e12, 1e12, 6)
         if ok: return self.geometryEditTool().offsetCurve(distance)
         return False
 
@@ -2629,7 +2629,7 @@ class QgisApp(QMainWindow):
             if not geometry.isNull(): geometry.transform(transform)
             feature.setGeometry(geometry)
             copies.append(feature)
-        layer.beginEditCommand('粘贴要素')
+        layer.beginEditCommand(QCoreApplication.translate('QgisApp', 'Features pasted'))
         if layer.addFeatures(copies):
             layer.endEditCommand()
         else:
@@ -2787,7 +2787,7 @@ class QgisApp(QMainWindow):
     def exportVectorLayer(self, layer, path, options, addToCanvas=True):
         result = QgsVectorFileWriter.writeAsVectorFormatV3(layer, path, self.mProject.transformContext(), options)
         if result[0] != QgsVectorFileWriter.NoError:
-            self.mMessageBar.pushCritical('导出失败', str(result[1]))
+            self.mMessageBar.pushCritical(QCoreApplication.translate('QgisApp', 'Export failed'), str(result[1]))
             return None
         filename = result[2] or path
         layerName = result[3] or options.layerName
@@ -2814,14 +2814,14 @@ class QgisApp(QMainWindow):
                 layer.triggerRepaint()
 
     def saveStyle(self):
-        path, _ = QFileDialog.getSaveFileName(self, '保存样式', '', 'QGIS 样式 (*.qml)')
+        path, _ = QFileDialog.getSaveFileName(self, QCoreApplication.translate('QgsLayerPropertiesDialog', 'Save Style'), '', 'QGIS 样式 (*.qml)')
         if path: self.activeLayer().saveNamedStyle(path)
 
     def loadStyle(self):
-        path, _ = QFileDialog.getOpenFileName(self, '加载样式', '', 'QGIS 样式 (*.qml);;SLD (*.sld)')
+        path, _ = QFileDialog.getOpenFileName(self, QCoreApplication.translate('QgsLayerPropertiesDialog', 'Load Style'), '', 'QGIS 样式 (*.qml);;SLD (*.sld)')
         if path:
             message, ok = self.activeLayer().loadNamedStyle(path)
-            if not ok: self.mMessageBar.pushWarning('样式', message)
+            if not ok: self.mMessageBar.pushWarning(QCoreApplication.translate('DlgRenderingStyles', 'Style'), message)
             self.activeLayer().triggerRepaint()
 
     def newMemoryLayer(self):
@@ -2874,7 +2874,7 @@ class QgisApp(QMainWindow):
             from processing import execAlgorithmDialog
             return execAlgorithmDialog('gdal:translate', {'INPUT': layer})
         else:
-            self.mMessageBar.pushWarning('导出', '当前类型的导出控制器尚未移植')
+            self.mMessageBar.pushWarning(QCoreApplication.translate('QgsAuthCertInfo', 'Export'), '当前类型的导出控制器尚未移植')
 
     def addLayerDefinition(self):
         path, _ = QFileDialog.getOpenFileName(self, '图层定义', '', 'QGIS 图层定义 (*.qlr)')
@@ -3050,7 +3050,7 @@ class QgisApp(QMainWindow):
         self.mMapCanvas.saveAsImage(path)
         image = QImage(path)
         if image.isNull():
-            self.mMessageBar.pushCritical('导出失败', path)
+            self.mMessageBar.pushCritical(QCoreApplication.translate('QgisApp', 'Export failed'), path)
             return False
         ratio = image.width() / max(1, self.mMapCanvas.mapSettings().outputSize().width())
         image.setDevicePixelRatio(ratio)
@@ -3060,7 +3060,7 @@ class QgisApp(QMainWindow):
         finally:
             painter.end()
         success = image.save(path)
-        if not success: self.mMessageBar.pushCritical('导出失败', path)
+        if not success: self.mMessageBar.pushCritical(QCoreApplication.translate('QgisApp', 'Export failed'), path)
         return success
 
     def mapLayout(self):
@@ -3108,14 +3108,14 @@ class QgisApp(QMainWindow):
         finally:
             sip.delete(task)  # Flush the native PDF writer before returning.
             QApplication.restoreOverrideCursor()
-        if not success: self.mMessageBar.pushCritical('导出失败', path)
+        if not success: self.mMessageBar.pushCritical(QCoreApplication.translate('QgisApp', 'Export failed'), path)
         return success
 
     def newPrintLayout(self):
-        name, ok = QInputDialog.getText(self, '新建打印布局', '名称')
+        name, ok = QInputDialog.getText(self, QCoreApplication.translate('MainWindow', 'New Print Layout'), QCoreApplication.translate('DBManagerPlugin', 'Name'))
         if not ok or not name: return
         if self.mProject.layoutManager().layoutByName(name):
-            self.mMessageBar.pushWarning('布局', '该名称已经存在')
+            self.mMessageBar.pushWarning(QCoreApplication.translate('JavascriptExecutorLoop', 'Layout'), '该名称已经存在')
             return
         layout = self.mapLayout()
         layout.setName(name)
@@ -3140,7 +3140,7 @@ class QgisApp(QMainWindow):
     def showLayoutManager(self):
         from qgis.PyQt.QtWidgets import QListWidget
         dialog = QDialog(self)
-        dialog.setWindowTitle('布局管理器')
+        dialog.setWindowTitle(QCoreApplication.translate('QgsLayoutDesignerBase', 'Layout manager'))
         box = QVBoxLayout(dialog)
         view = QListWidget()
         layouts = self.mProject.layoutManager().layouts()
@@ -3148,13 +3148,13 @@ class QgisApp(QMainWindow):
         box.addWidget(view)
         view.itemDoubleClicked.connect(
             lambda item: self.openLayoutDesigner(self.mProject.layoutManager().layoutByName(item.text())))
-        add = QPushButton('新建布局')
+        add = QPushButton(QCoreApplication.translate('QgsLayoutDesignerBase', 'New layout'))
         add.clicked.connect(self.newPrintLayout)
         box.addWidget(add)
         dialog.exec_()
 
     def newBookmark(self):
-        name, ok = QInputDialog.getText(self, '书签', '名称')
+        name, ok = QInputDialog.getText(self, QCoreApplication.translate('QgsExtentGroupBoxWidget', 'Bookmark'), QCoreApplication.translate('DBManagerPlugin', 'Name'))
         if ok and name:
             bookmark = QgsBookmark()
             bookmark.setName(name)

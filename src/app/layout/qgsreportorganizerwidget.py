@@ -1,6 +1,6 @@
 """QGIS report tree, original section forms and native report persistence."""
 from qgis.PyQt import sip, uic
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.PyQt.QtWidgets import (QMainWindow, QVBoxLayout, QMenu, QFileDialog,
                                 QMessageBox, QAbstractItemView)
 from qgis.core import (QgsLayout, QgsReportSectionLayout, QgsReportSectionFieldGroup,
@@ -46,13 +46,13 @@ class QgsReportOrganizerWidget(QMainWindow):
         toolbar = self.addToolBar('报表')
         toolbar.setObjectName('ReportToolbar')
         self.mActionEditSection = toolbar.addAction('编辑正文', self.editSection)
-        self.mActionMoveUp = toolbar.addAction('上移', lambda: self.moveSection(-1))
-        self.mActionMoveDown = toolbar.addAction('下移', lambda: self.moveSection(1))
+        self.mActionMoveUp = toolbar.addAction(QCoreApplication.translate('QgsProcessingAggregateMapPanelBase', 'up'), lambda: self.moveSection(-1))
+        self.mActionMoveDown = toolbar.addAction(QCoreApplication.translate('QgsProcessingAggregateMapPanelBase', 'down'), lambda: self.moveSection(1))
         self.mActionIndent = toolbar.addAction('降级', self.indentSection)
-        self.mActionOutdent = toolbar.addAction('升级', self.outdentSection)
+        self.mActionOutdent = toolbar.addAction(QCoreApplication.translate('QgsPluginDependenciesDialog', 'Upgrade'), self.outdentSection)
         self.mActionDuplicate = toolbar.addAction('复制章节', self.duplicateSection)
         toolbar.addSeparator()
-        toolbar.addAction('保存工程', app.fileSave)
+        toolbar.addAction(QCoreApplication.translate('MainWindow', 'Save Project'), app.fileSave)
         toolbar.addAction('导出 PDF', lambda: self.exportPdf())
         report.destroyed.connect(self.reportDestroyed)
         self.selectSection(report)

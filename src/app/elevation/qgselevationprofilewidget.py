@@ -1,7 +1,7 @@
 """Elevation profile controller using native layer, plot and export APIs."""
 from pathlib import Path
 from qgis.PyQt import sip
-from qgis.PyQt.QtCore import Qt, QTimer, QSizeF, QSize, QMarginsF
+from qgis.PyQt.QtCore import QCoreApplication, Qt, QTimer, QSizeF, QSize, QMarginsF
 from qgis.PyQt.QtGui import QColor, QPainter, QImage
 from qgis.PyQt.QtWidgets import (QWidget, QVBoxLayout, QToolBar, QFileDialog, QLabel,
     QSplitter, QMenu, QToolButton, QActionGroup, QDialog, QListWidget, QListWidgetItem,
@@ -136,8 +136,8 @@ class QgsElevationProfileWidget(QgsDockWidget):
         return action
 
     def setupActions(self):
-        self.addAction('addLayerAction', '添加图层', 'mActionAddLayer.svg', self.addLayers)
-        show = self.addAction('showLayerTree', '显示图层树', 'mIconLayerTree.svg', self.showLayerTreeChanged, True)
+        self.addAction('addLayerAction', QCoreApplication.translate('QgsElevationProfileWidget', 'Add Layers'), 'mActionAddLayer.svg', self.addLayers)
+        show = self.addAction('showLayerTree', QCoreApplication.translate('QgsElevationProfileWidget', 'Show Layer Tree'), 'mIconLayerTree.svg', self.showLayerTreeChanged, True)
         show.setChecked(QgsSettings().value('elevation-profile/show-layer-tree', True, type=bool))
         self.mLayerTreeView.setVisible(show.isChecked())
         self.mToolBar.addSeparator()
@@ -184,7 +184,7 @@ class QgsElevationProfileWidget(QgsDockWidget):
         self.mCanvas.setTolerance(self.mTolerance.value())
         self.mTolerance.valueChanged.connect(self.setTolerance)
         self.mToolBar.addWidget(self.mTolerance)
-        units = QMenu('距离单位', self)
+        units = QMenu(QCoreApplication.translate('QgsElevationProfileWidget', 'Distance Units'), self)
         group = QActionGroup(units)
         for unit in (Qgis.DistanceUnit.Kilometers, Qgis.DistanceUnit.Meters,
                      Qgis.DistanceUnit.Centimeters, Qgis.DistanceUnit.Millimeters,
@@ -198,7 +198,7 @@ class QgsElevationProfileWidget(QgsDockWidget):
             action.triggered.connect(lambda _=False, u=unit: self.mCanvas.setDistanceUnit(u))
         units.aboutToShow.connect(lambda: [a.setChecked(a.data() == int(self.mCanvas.distanceUnit())) for a in units.actions()])
         button = QToolButton()
-        button.setText('单位')
+        button.setText(QCoreApplication.translate('QgsLayoutElevationProfileWidgetBase', 'Unit'))
         button.setMenu(units)
         button.setPopupMode(QToolButton.InstantPopup)
         self.mToolBar.addWidget(button)

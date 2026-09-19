@@ -3,7 +3,7 @@ from pathlib import Path
 from dataclasses import dataclass, replace
 import re
 from qgis.PyQt import uic
-from qgis.PyQt.QtCore import Qt, QUrl
+from qgis.PyQt.QtCore import QCoreApplication, Qt, QUrl
 from qgis.PyQt.QtGui import QDesktopServices
 from qgis.PyQt.QtWidgets import QTreeWidgetItem, QAbstractItemView, QMessageBox, QDialog, QVBoxLayout, QDialogButtonBox
 from qgis.core import Qgis, QgsApplication, QgsCoordinateReferenceSystem
@@ -75,7 +75,7 @@ class QgsCustomProjectionOptionsWidget(QgsOptionsPageWidget):
     def pbnRemove_clicked(self, confirm=True):
         rows = sorted({self.leNameList.indexOfTopLevelItem(item) for item in self.leNameList.selectedItems()}, reverse=True)
         if not rows: return
-        if confirm and QMessageBox.question(self, '删除投影', f'删除选中的 {len(rows)} 个坐标参考系？',
+        if confirm and QMessageBox.question(self, QCoreApplication.translate('QgsCustomProjectionOptionsWidget', 'Delete Projections'), f'删除选中的 {len(rows)} 个坐标参考系？',
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes: return
         self.mBlockUpdates = True
         try:
@@ -128,7 +128,7 @@ class QgsCustomProjectionOptionsWidget(QgsOptionsPageWidget):
                 error = f'“{definition.name}”与 {crs.authid()} 等价，不能重复保存；请修改定义，或检查 WKT 中的权威机构 ID。'
             if error:
                 self.leNameList.setCurrentItem(self.leNameList.topLevelItem(row))
-                if showErrors: QMessageBox.warning(self, '自定义投影', error)
+                if showErrors: QMessageBox.warning(self, QCoreApplication.translate('QgisApp', 'Custom Projections'), error)
                 return False
         return True
 
@@ -147,14 +147,14 @@ class QgsCustomProjectionOptionsWidget(QgsOptionsPageWidget):
             identifier = self.saveCrs(self.crsForDefinition(definition), definition.name, definition.id,
                                      not bool(definition.id), definition.format)
             if identifier is None:
-                QMessageBox.warning(self, '自定义投影', f'无法保存“{definition.name}”，请检查用户数据库是否可写。')
+                QMessageBox.warning(self, QCoreApplication.translate('QgisApp', 'Custom Projections'), f'无法保存“{definition.name}”，请检查用户数据库是否可写。')
                 return False
             definition.id = identifier
             self.mExistingCRS[identifier] = replace(definition)
             self.leNameList.topLevelItem(row).setText(1, str(identifier))
         for identifier in list(self.mDeletedCRSs):
             if not self.mRegistry.removeUserCrs(identifier):
-                QMessageBox.warning(self, '自定义投影', f'无法删除 USER:{identifier}。')
+                QMessageBox.warning(self, QCoreApplication.translate('QgisApp', 'Custom Projections'), f'无法删除 USER:{identifier}。')
                 return False
             self.mDeletedCRSs.remove(identifier)
             self.mExistingCRS.pop(identifier, None)

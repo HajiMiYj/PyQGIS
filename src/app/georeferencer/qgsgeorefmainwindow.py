@@ -3,7 +3,7 @@ import json
 import math
 from pathlib import Path
 from qgis.PyQt import uic, sip
-from qgis.PyQt.QtCore import Qt, QRectF
+from qgis.PyQt.QtCore import QCoreApplication, Qt, QRectF
 from qgis.PyQt.QtGui import QFont
 from qgis.PyQt.QtWidgets import (QMainWindow, QVBoxLayout, QActionGroup, QFileDialog,
                                 QMessageBox, QProgressDialog, QApplication, QDialog,
@@ -196,11 +196,11 @@ class QgsGeoreferencerMainWindow(QMainWindow):
         uri, provider = fileName, 'gdal' if raster else 'ogr'
         if fileName is None:
             if raster:
-                fileName, _ = QFileDialog.getOpenFileName(self, '打开栅格', '', QgsProviderRegistry.instance().fileRasterFilters())
+                fileName, _ = QFileDialog.getOpenFileName(self, QCoreApplication.translate('QgsGeoreferencerMainWindow', 'Open Raster'), '', QgsProviderRegistry.instance().fileRasterFilters())
                 uri = fileName
             else:
                 dialog = QgsDataSourceSelectDialog(self.mApp.mBrowserModel, True, Qgis.LayerType.Vector, self)
-                dialog.setWindowTitle('打开矢量')
+                dialog.setWindowTitle(QCoreApplication.translate('QgsGeoreferencerMainWindow', 'Open Vector'))
                 if not dialog.exec_():
                     dialog.deleteLater()
                     return False
@@ -407,7 +407,7 @@ class QgsGeoreferencerMainWindow(QMainWindow):
         if not self.mSettings['worldfile']:
             if output.suffix.lower() not in (('.tif', '.tiff') if raster else ('.gpkg',)): raise ValueError('栅格请输出 GeoTIFF，矢量请输出 GeoPackage')
             if output.resolve() == Path(self.mSourceFile).resolve() or output.exists(): raise ValueError('请使用新的输出文件名，不能覆盖源数据或已有文件')
-        progress = QProgressDialog('正在地理配准…', '取消', 0, 100, self)
+        progress = QProgressDialog('正在地理配准…', QCoreApplication.translate('DbManagerDlgSqlWindow', 'Cancel'), 0, 100, self)
         progress.setWindowModality(Qt.WindowModal)
         progress.setMinimumDuration(0)
         self.mBusy = True
@@ -489,7 +489,7 @@ class QgsGeoreferencerMainWindow(QMainWindow):
         editor.setPlainText(script)
         layout.addWidget(editor)
         buttons = QDialogButtonBox(QDialogButtonBox.Close, parent=dialog)
-        copy = buttons.addButton('复制到剪贴板', QDialogButtonBox.ActionRole)
+        copy = buttons.addButton(QCoreApplication.translate('QgsGeoreferencerMainWindow', 'Copy to Clipboard'), QDialogButtonBox.ActionRole)
         copy.setObjectName('pbnCopyInClipBoard')
         copy.clicked.connect(lambda: QApplication.clipboard().setText(editor.toPlainText()))
         save = buttons.addButton('保存脚本…', QDialogButtonBox.ActionRole)
@@ -654,7 +654,7 @@ class QgsGeoreferencerMainWindow(QMainWindow):
 
         residualLabel = QgsLayoutItemLabel(layout)
         residualLabel.setTextFormat(titleFormat)
-        residualLabel.setText('残差')
+        residualLabel.setText(QCoreApplication.translate('QgsGeoreferencerMainWindow', 'Residuals'))
         layout.addLayoutItem(residualLabel)
         residualLabel.attemptSetSceneRect(
             QRectF(leftMargin, parameterFrame.rect().bottom() + parameterFrame.pos().y() + 5, contentWidth, 6))
@@ -673,7 +673,7 @@ class QgsGeoreferencerMainWindow(QMainWindow):
         gcpTable.setHeaderTextFormat(headerFormat)
         gcpTable.setContentTextFormat(contentFormat)
         gcpTable.setHeaderMode(QgsLayoutTable.AllFrames)
-        gcpTable.setColumns([QgsLayoutTableColumn('ID'), QgsLayoutTableColumn('启用'),
+        gcpTable.setColumns([QgsLayoutTableColumn('ID'), QgsLayoutTableColumn(QCoreApplication.translate('QgsGeoreferencerMainWindow', 'Enabled')),
                              QgsLayoutTableColumn('像素 X'), QgsLayoutTableColumn('像素 Y'),
                              QgsLayoutTableColumn('地图 X'), QgsLayoutTableColumn('地图 Y'),
                              QgsLayoutTableColumn(f'残差 X ({units})'), QgsLayoutTableColumn(f'残差 Y ({units})'),

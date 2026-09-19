@@ -1,3 +1,4 @@
+from qgis.PyQt.QtCore import QCoreApplication
 from pathlib import Path
 from qgis.PyQt import uic
 from qgis.PyQt.QtWidgets import QDialog, QDialogButtonBox, QMessageBox
@@ -54,11 +55,11 @@ class QgsDecorationGridDialog(QDialog):
 
     def mPbtnUpdateFromLayer_clicked(self):
         try: self.setIntervals(self.mDeco.getIntervalFromCurrentLayer())
-        except ValueError as error: QMessageBox.warning(self, '从图层获取间隔', str(error))
+        except ValueError as error: QMessageBox.warning(self, QCoreApplication.translate('QgsDecorationGrid', 'Get Interval from Layer'), str(error))
 
     def apply(self):
         if self.grpEnable.isChecked() and (self.mIntervalXEdit.value() <= 0 or self.mIntervalYEdit.value() <= 0):
-            QMessageBox.warning(self, '网格', 'X 和 Y 间隔必须大于零。')
+            QMessageBox.warning(self, QCoreApplication.translate('QgsDecorationGrid', 'Grid'), 'X 和 Y 间隔必须大于零。')
             return False
         deco = self.mDeco
         deco.setEnabled(self.grpEnable.isChecked())

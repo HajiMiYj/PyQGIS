@@ -1,7 +1,7 @@
 """Port of src/app/dwg/qgsdwgimportdialog.cpp using its original Designer form."""
 from pathlib import Path
 from qgis.PyQt import uic, sip
-from qgis.PyQt.QtCore import Qt, QUrl
+from qgis.PyQt.QtCore import QCoreApplication, Qt, QUrl
 from qgis.PyQt.QtGui import QDesktopServices
 from qgis.PyQt.QtWidgets import QDialog, QDialogButtonBox, QTableWidgetItem, QProgressDialog, QApplication
 from qgis.core import (
@@ -127,7 +127,7 @@ class QgsDwgImportDialog(QDialog):
         self.mGroupBox.setEnabled(False)
         self.buttonBox.setEnabled(False)
         self.updateUI()
-        progress = QProgressDialog('正在读取 CAD 图纸…', '取消', 0, 0, self)
+        progress = QProgressDialog('正在读取 CAD 图纸…', QCoreApplication.translate('DbManagerDlgSqlWindow', 'Cancel'), 0, 0, self)
         progress.setWindowModality(Qt.WindowModal)
         progress.setMinimumDuration(0)
         progress.show()
@@ -349,7 +349,7 @@ class QgsDwgImportDialog(QDialog):
             self.mMapCanvas.setExtent(extent)
             self.mMapCanvas.refresh()
         except Exception as error:
-            self.bar.pushWarning('预览', str(error))
+            self.bar.pushWarning(QCoreApplication.translate('DBManager', 'Preview'), str(error))
 
     def layersClicked(self, *unused):
         if self.mUpdating: return

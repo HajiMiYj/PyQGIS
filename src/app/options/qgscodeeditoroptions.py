@@ -5,6 +5,7 @@ QgsCodeEditor::setCustomAppearance(), which is not exported to PyQGIS, but
 QgsCodeEditor::color()/defaultColor() read the settings on demand, so the same
 result is reached by writing the settings and rebuilding the preview editors.
 """
+from qgis.PyQt.QtCore import QCoreApplication
 from pathlib import Path
 from qgis.PyQt import uic
 from qgis.PyQt.QtGui import QFont
@@ -229,7 +230,7 @@ class QgsCodeEditorOptionsWidget(QgsOptionsPageWidget):
             widget.setAllowOpacity(True)
             self.mColorButtonMap[role] = widget
 
-        self.mColorSchemeComboBox.addItem('默认', '')
+        self.mColorSchemeComboBox.addItem(QCoreApplication.translate('QgsCodeEditorOptionsWidget', 'Default'), '')
         registry = QgsGui.codeEditorColorSchemeRegistry()
         nameToId = {}
         for schemeId in registry.schemes():
@@ -237,7 +238,7 @@ class QgsCodeEditorOptionsWidget(QgsOptionsPageWidget):
             if scheme is None: continue
             nameToId[scheme.name()] = schemeId
             self.mColorSchemeComboBox.addItem(scheme.name(), schemeId)
-        self.mColorSchemeComboBox.addItem('自定义', 'custom')
+        self.mColorSchemeComboBox.addItem(QCoreApplication.translate('QgsCodeEditorOptionsWidget', 'Custom'), 'custom')
 
         override = settings.value(OVERRIDE_COLORS, False, type=bool)
         if override:

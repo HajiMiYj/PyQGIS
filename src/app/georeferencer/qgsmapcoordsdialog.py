@@ -2,7 +2,7 @@ import math
 import re
 from pathlib import Path
 from qgis.PyQt import uic
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.PyQt.QtWidgets import QDialog, QToolButton, QMessageBox
 from qgis.core import QgsPointXY, QgsCoordinateTransform, QgsApplication
 from qgis.gui import QgsMapToolEmitPoint
@@ -71,5 +71,5 @@ class QgsMapCoordsDialog(QDialog):
             if not self.mProjectionSelector.crs().isValid(): raise ValueError('请选择目标点的 CRS')
             self.mPoint = QgsPointXY(self.coordinate(self.leXCoord.text()), self.coordinate(self.leYCoord.text()))
         except ValueError as error:
-            QMessageBox.warning(self, '坐标', str(error)); return
+            QMessageBox.warning(self, QCoreApplication.translate('QgsStatusBarCoordinatesWidget', 'Coordinate'), str(error)); return
         super().accept()

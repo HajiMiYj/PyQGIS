@@ -1,5 +1,5 @@
 """Interactive geometry editing tools built on the QGIS 3.34 geometry API."""
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.PyQt.QtGui import QColor, QTransform
 from qgis.core import (
     Qgis, QgsFeature, QgsFeatureRequest, QgsGeometry, QgsPointXY,
@@ -115,14 +115,14 @@ class QgsMapToolGeometryEdit(QgsMapToolAdvancedDigitizing):
                 result = geometry.reshapeGeometry(points)
                 success = result == Qgis.GeometryOperationResult.Success
                 if success:
-                    layer.beginEditCommand('重塑要素')
+                    layer.beginEditCommand(QCoreApplication.translate('MainWindow', 'Reshape Features'))
                     success = layer.changeGeometry(feature.id(), geometry)
             else:
                 result, newGeometries, _ = geometry.splitGeometry(
                     points, False, self.mMode != 'splitParts')
                 success = result == Qgis.GeometryOperationResult.Success and bool(newGeometries)
                 if success:
-                    layer.beginEditCommand('分割部件' if self.mMode == 'splitParts' else '分割要素')
+                    layer.beginEditCommand(QCoreApplication.translate('MainWindow', 'Split Parts') if self.mMode == 'splitParts' else QCoreApplication.translate('MainWindow', 'Split Features'))
                     success = layer.changeGeometry(feature.id(), geometry)
                     copies = []
                     for newGeometry in newGeometries:
@@ -201,10 +201,10 @@ class QgsMapToolGeometryEdit(QgsMapToolAdvancedDigitizing):
             if geometry.type() != QgsWkbTypes.LineGeometry: return False
             replacement = QgsGeometry.collectGeometry([QgsGeometry(part.constGet().reversed()) for part in geometry.asGeometryCollection()]) if geometry.isMultipart() else QgsGeometry(geometry.constGet().reversed())
             return self.replaceGeometry(geometry, replacement)
-        return self.applyToSelected(reverse, '反转线')
+        return self.applyToSelected(reverse, QCoreApplication.translate('MainWindow', 'Reverse line'))
 
     def simplifyFeature(self, tolerance):
-        return self.applyToSelected(lambda geometry: self.replaceGeometry(geometry, geometry.simplify(tolerance)), '简化要素')
+        return self.applyToSelected(lambda geometry: self.replaceGeometry(geometry, geometry.simplify(tolerance)), QCoreApplication.translate('MainWindow', 'Simplify Feature'))
 
     @staticmethod
     def replaceGeometry(target, replacement):
@@ -216,13 +216,13 @@ class QgsMapToolGeometryEdit(QgsMapToolAdvancedDigitizing):
         def offset(geometry):
             replacement = geometry.offsetCurve(distance, 8, Qgis.JoinStyle.Round, 2.0)
             return self.replaceGeometry(geometry, replacement)
-        return self.applyToSelected(offset, '偏移曲线')
+        return self.applyToSelected(offset, QCoreApplication.translate('MainWindow', 'Offset Curve'))
 
     def rotateFeature(self, angle):
         def rotate(geometry):
             center = geometry.centroid().asPoint()
             return geometry.rotate(angle, QgsPointXY(center)) == Qgis.GeometryOperationResult.Success
-        return self.applyToSelected(rotate, '旋转要素')
+        return self.applyToSelected(rotate, QCoreApplication.translate('QgsMapToolRotateFeature', 'Rotate feature'))
 
     def scaleFeature(self, factor):
         def scale(geometry):
@@ -232,16 +232,16 @@ class QgsMapToolGeometryEdit(QgsMapToolAdvancedDigitizing):
             transform.scale(factor, factor)
             transform.translate(-center.x(), -center.y())
             return geometry.transform(transform) == Qgis.GeometryOperationResult.Success
-        return self.applyToSelected(scale, '缩放要素')
+        return self.applyToSelected(scale, QCoreApplication.translate('QgsMapToolScaleFeature', 'Scale feature'))
 
     def deletePart(self):
         def delete_last_part(geometry):
             parts = list(geometry.constParts())
             return len(parts) > 1 and geometry.deletePart(len(parts) - 1)
-        return self.applyToSelected(delete_last_part, '删除部件')
+        return self.applyToSelected(delete_last_part, QCoreApplication.translate('MainWindow', 'Delete Part'))
 
     def deleteRing(self):
-        return self.applyToSelected(lambda geometry: geometry.deleteRing(1), '删除环')
+        return self.applyToSelected(lambda geometry: geometry.deleteRing(1), QCoreApplication.translate('MainWindow', 'Delete Ring'))
 
     def mergeFeatures(self):
         layer = self.layer()
@@ -251,7 +251,7 @@ class QgsMapToolGeometryEdit(QgsMapToolAdvancedDigitizing):
         merged = QgsGeometry(features[0].geometry())
         for feature in features[1:]:
             merged = merged.combine(feature.geometry())
-        layer.beginEditCommand('合并要素')
+        layer.beginEditCommand(QCoreApplication.translate('QgisApp', 'Merge Features'))
         success = layer.changeGeometry(features[0].id(), merged)
         if success:
             success = all(layer.deleteFeature(feature.id()) for feature in features[1:])

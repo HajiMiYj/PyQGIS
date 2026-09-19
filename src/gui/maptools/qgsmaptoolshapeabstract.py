@@ -4,7 +4,7 @@ QGIS 3.34 does not bind QgsMapToolShapeAbstract or its registry. This adapter
 uses native CAD events, geometry constructors and a native capture parent.
 """
 from qgis.PyQt import sip
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.PyQt.QtGui import QColor
 from math import isfinite
 from qgis.core import Qgis, QgsGeometry, QgsPoint, QgsPointXY, QgsSettings, QgsWkbTypes, QgsVectorLayer, QgsVertexId
@@ -37,7 +37,7 @@ class QgsMapToolShapeAbstract(QgsMapToolAdvancedDigitizing):
         if self.regularPolygon:
             self.mNumberSidesSpinBox = QgsSpinBox()
             self.mNumberSidesSpinBox.setRange(3, 99999999)
-            self.mNumberSidesSpinBox.setPrefix('边数：')
+            self.mNumberSidesSpinBox.setPrefix(QCoreApplication.translate('QgsMapToolShapeRegularPolygonAbstract', 'Number of sides: '))
             self.mNumberSidesSpinBox.setValue(self.mNumberSides)
             self.mNumberSidesSpinBox.valueChanged.connect(self.setNumberSides)
             self.mManager.mApp.addUserInputWidget(self.mNumberSidesSpinBox)
@@ -106,7 +106,7 @@ class QgsMapToolShapeAbstract(QgsMapToolAdvancedDigitizing):
     def cadCanvasReleaseEvent(self, event):
         if not self.mManager.parentAvailable(self.mParentTool):
             self.clean()
-            self.mManager.mApp.mMessageBar.pushWarning('形状数字化', '目标图层或捕获工具已不可用')
+            self.mManager.mApp.mMessageBar.pushWarning(QCoreApplication.translate('MainWindow', 'Digitize Shape'), '目标图层或捕获工具已不可用')
             return
         point = self.mParentTool.mapPoint(event)
         if event.button() == Qt.LeftButton:
@@ -119,7 +119,7 @@ class QgsMapToolShapeAbstract(QgsMapToolAdvancedDigitizing):
                 return
             curve = self.shapeCurve(self.mPoints + [point])
             if curve is None or curve.isEmpty():
-                self.mManager.mApp.mMessageBar.pushWarning('形状数字化', '无法构造形状，请调整位置（避免重合点或共线点）')
+                self.mManager.mApp.mMessageBar.pushWarning(QCoreApplication.translate('MainWindow', 'Digitize Shape'), '无法构造形状，请调整位置（避免重合点或共线点）')
                 return
             if curve.length() <= 0: return
             self.mManager.finishShape(self, curve, event)

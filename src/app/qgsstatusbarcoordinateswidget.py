@@ -1,6 +1,6 @@
 import math
 import re
-from qgis.PyQt.QtCore import Qt, QLocale, QElapsedTimer
+from qgis.PyQt.QtCore import QCoreApplication, Qt, QLocale, QElapsedTimer
 
 from qgis.core import (Qgis, QgsPointXY, QgsApplication, QgsProject, QgsCoordinateTransform,
                        QgsCoordinateReferenceSystemUtils, QgsCoordinateFormatter, QgsNumericFormatContext,
@@ -17,7 +17,7 @@ class QgsStatusBarCoordinatesWidget(QWidget):
         self.mLastCoordinate = None
         self.mMousePrecisionDecimalPlaces = 0
         self.mLastSizeChangeTimer = QElapsedTimer()
-        self.mLabel = QLabel('坐标', self)
+        self.mLabel = QLabel(QCoreApplication.translate('QgsStatusBarCoordinatesWidget', 'Coordinate'), self)
         self.mLabel.setObjectName('mCoordsLabel')
         self.mLabel.setMargin(3)
         self.mLabel.setMinimumWidth(10)
@@ -120,7 +120,7 @@ class QgsStatusBarCoordinatesWidget(QWidget):
                                    self.formatCoordinate(QgsPointXY(extent.xMaximum(), extent.yMaximum())))
             self.ensureCoordinatesVisible()
     def extentsViewToggled(self, checked):
-        self.mLabel.setText('范围' if checked else '坐标')
+        self.mLabel.setText(QCoreApplication.translate('QgsStatusBarCoordinatesWidget', 'Extents') if checked else QCoreApplication.translate('QgsStatusBarCoordinatesWidget', 'Coordinate'))
         self.mToggleExtentsViewButton.setIcon(QgsApplication.getThemeIcon('/extents.svg' if checked else '/tracking.svg'))
         self.mLineEdit.setReadOnly(checked)
         if checked: self.showExtent()

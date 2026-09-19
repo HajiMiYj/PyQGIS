@@ -1,4 +1,5 @@
 """Original Designer form with the application-side slots from QGIS 3.34."""
+from qgis.PyQt.QtCore import QCoreApplication
 from pathlib import Path
 from qgis.PyQt import uic
 from qgis.PyQt.QtWidgets import QDialog, QDialogButtonBox
@@ -23,7 +24,7 @@ class QgsDecorationTitleDialog(QDialog):
         self.mTextEdit.setPlainText(decoration.mLabelText or (self.defaultText() if not decoration.enabled() else ''))
         self.mButtonFontStyle.setMapCanvas(parent.mMapCanvas)
         self.mButtonFontStyle.setTextFormat(decoration.mTextFormat)
-        self.mButtonFontStyle.setDialogTitle('文本格式')
+        self.mButtonFontStyle.setDialogTitle(QCoreApplication.translate('QObject', 'Text Format'))
         self.mInsertExpressionButton.clicked.connect(self.insertExpression)
         if decoration.hasBackground:
             self.pbnBackgroundColor.setAllowOpacity(True)

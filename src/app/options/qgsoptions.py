@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
 from qgis.PyQt import uic
-from qgis.PyQt.QtCore import Qt, QSize, QUrl, QLocale
+from qgis.PyQt.QtCore import QCoreApplication, Qt, QSize, QUrl, QLocale
 from qgis.PyQt.QtGui import QStandardItem, QStandardItemModel, QColor, QDesktopServices, QFont
 from qgis.PyQt.QtWidgets import (QVBoxLayout, QToolBar, QFileDialog, QInputDialog, QListWidgetItem,
                                  QMessageBox, QStyleFactory)
@@ -81,41 +81,41 @@ class QgsOptions(QgsOptionsDialogBase):
         self.initMapTools()
         self.initNativePages()
         self.mRenderingOptionsWidget = QgsRenderingOptionsWidget(self)
-        self.insertPage('渲染', '渲染', QgsApplication.getThemeIcon('/propertyicons/rendering.svg'), self.mRenderingOptionsWidget, 'mOptionsPageMapCanvas', [], 'rendering')
+        self.insertPage(QCoreApplication.translate('QgisApp', 'Render'), QCoreApplication.translate('QgisApp', 'Render'), QgsApplication.getThemeIcon('/propertyicons/rendering.svg'), self.mRenderingOptionsWidget, 'mOptionsPageMapCanvas', [], 'rendering')
         self.mPages.append(self.mRenderingOptionsWidget)
         # Native registers the raster and vector rendering pages as options widget
         # factories whose path() is {"rendering"}, so they nest under Rendering.
         self.mRasterRenderingOptionsWidget = QgsRasterRenderingOptionsWidget(self)
-        self.addPage('栅格', '栅格渲染默认值', QgsApplication.getThemeIcon('mIconRaster.svg'),
+        self.addPage(QCoreApplication.translate('DbManagerDlgSqlLayerWindow', 'Raster'), '栅格渲染默认值', QgsApplication.getThemeIcon('mIconRaster.svg'),
                      self.mRasterRenderingOptionsWidget, ['rendering'], 'raster')
         self.mPages.append(self.mRasterRenderingOptionsWidget)
         self.mVectorRenderingOptionsWidget = QgsVectorRenderingOptionsWidget(self)
-        self.addPage('矢量', '矢量渲染默认值', QgsApplication.getThemeIcon('mIconVector.svg'),
+        self.addPage(QCoreApplication.translate('DbManagerDlgSqlLayerWindow', 'Vector'), '矢量渲染默认值', QgsApplication.getThemeIcon('mIconVector.svg'),
                      self.mVectorRenderingOptionsWidget, ['rendering'], 'vector')
         self.mPages.append(self.mVectorRenderingOptionsWidget)
         # Native pagePositionHint(): the elevation page sits before Colors, the
         # advanced settings tree is appended at the end.
         self.mElevationOptionsWidget = QgsElevationOptionsWidget(self)
-        self.insertPage('高程', '高程剖面默认值', QgsApplication.getThemeIcon('propertyicons/elevationscale.svg'),
+        self.insertPage(QCoreApplication.translate('HypsometricCurves', 'Elevation'), '高程剖面默认值', QgsApplication.getThemeIcon('propertyicons/elevationscale.svg'),
                         self.mElevationOptionsWidget, 'mOptionsPageColors', [], 'elevation')
         self.mPages.append(self.mElevationOptionsWidget)
         self.mAdvancedOptionsWidget = QgsAdvancedSettingsWidget(self)
-        self.addPage('高级', '直接编辑设置项', QgsApplication.getThemeIcon('/mIconWarning.svg'),
+        self.addPage(QCoreApplication.translate('QgsOptionsBase', 'Advanced'), '直接编辑设置项', QgsApplication.getThemeIcon('/mIconWarning.svg'),
                      self.mAdvancedOptionsWidget, [], 'advanced')
         self.mPages.append(self.mAdvancedOptionsWidget)
         # Native pagePositionHint(): the user profiles page sits before CRS.
         self.mUserProfileOptionsWidget = QgsUserProfileOptionsWidget(self, app)
-        self.insertPage('用户配置', '启动时加载的配置档案', QgsApplication.getThemeIcon('/user.svg'),
+        self.insertPage(QCoreApplication.translate('QgsUserProfileOptionsFactory', 'User Profiles'), '启动时加载的配置档案', QgsApplication.getThemeIcon('/user.svg'),
                         self.mUserProfileOptionsWidget, 'mOptionsPageCRS', [], 'profiles')
         self.mPages.append(self.mUserProfileOptionsWidget)
         # Native pagePositionHint(): the fonts page sits before Layout.
         self.mFontOptionsWidget = QgsFontOptionsWidget(self)
-        self.insertPage('字体', '字体替换、用户字体与缺失字体下载', QgsApplication.getThemeIcon('/mIconFonts.svg'),
+        self.insertPage(QCoreApplication.translate('QObject', 'Font'), '字体替换、用户字体与缺失字体下载', QgsApplication.getThemeIcon('/mIconFonts.svg'),
                         self.mFontOptionsWidget, 'mOptionsPageComposer', [], 'fonts')
         self.mPages.append(self.mFontOptionsWidget)
         # Native path() is {"ide"} and pagePositionHint() is consoleOptions.
         self.mCodeEditorOptionsWidget = QgsCodeEditorOptionsWidget(self)
-        self.insertPage('代码编辑器', '配色方案、颜色角色与等宽字体', QgsApplication.getThemeIcon('/mIconCodeEditor.svg'),
+        self.insertPage(QCoreApplication.translate('QgsCodeEditorDockWidget', 'Code Editor'), '配色方案、颜色角色与等宽字体', QgsApplication.getThemeIcon('/mIconCodeEditor.svg'),
                         self.mCodeEditorOptionsWidget, 'consoleOptions', ['ide'], 'code_editor')
         self.mPages.append(self.mCodeEditorOptionsWidget)
         for factory in app.mQgisInterface.mOptionsFactories:
@@ -622,9 +622,9 @@ class QgsOptions(QgsOptionsDialogBase):
     def setCurrentProjectDefault(self):
         fileName = self.defaultProjectPath()
         if QgsProject.instance().write(fileName):
-            QMessageBox.information(self, '保存默认工程', '当前工程已保存为默认工程')
+            QMessageBox.information(self, QCoreApplication.translate('QgsOptions', 'Save Default Project'), '当前工程已保存为默认工程')
         else:
-            QMessageBox.critical(self, '保存默认工程', '将当前工程保存为默认工程时出错')
+            QMessageBox.critical(self, QCoreApplication.translate('QgsOptions', 'Save Default Project'), QCoreApplication.translate('QgsOptions', 'Error saving current project as default'))
 
     def resetProjectDefault(self):
         fileName = self.defaultProjectPath()
@@ -660,7 +660,7 @@ class QgsOptions(QgsOptionsDialogBase):
     def customizeCoordinateFormat(self):
         from qgis.gui import QgsGeographicCoordinateNumericFormatDialog
         dialog = QgsGeographicCoordinateNumericFormatDialog(self.mCoordinateFormat, False, self)
-        dialog.setWindowTitle('坐标格式')
+        dialog.setWindowTitle(QCoreApplication.translate('QgsOptions', 'Coordinate Format'))
         if dialog.exec_():
             self.mCoordinateFormat = dialog.format()
 
@@ -771,10 +771,10 @@ class QgsOptions(QgsOptionsDialogBase):
     def buildColorSchemeMenu(self):
         from qgis.PyQt.QtWidgets import QMenu
         menu = QMenu(self)
-        self.mActionNewPalette = menu.addAction('新建调色板…')
+        self.mActionNewPalette = menu.addAction(QCoreApplication.translate('QgsOptionsBase', 'New Palette…'))
         self.mActionImportPalette = menu.addAction('导入调色板…')
         self.mActionRemovePalette = menu.addAction('删除调色板…')
-        self.mActionShowInButtons = menu.addAction('在颜色按钮中显示')
+        self.mActionShowInButtons = menu.addAction(QCoreApplication.translate('QgsOptionsBase', 'Show in Color Buttons'))
         self.mActionShowInButtons.setCheckable(True)
         self.mActionShowInButtons.setChecked(True)
         self.mActionNewPalette.triggered.connect(self.newColorPalette)
@@ -787,7 +787,7 @@ class QgsOptions(QgsOptionsDialogBase):
             # The no-argument C++ overload is not bound, so pick the colour here
             # (native connects the button straight to QgsColorSchemeList::addColor).
             from qgis.PyQt.QtWidgets import QColorDialog
-            color = QColorDialog.getColor(QColor(Qt.white), self, '选择颜色')
+            color = QColorDialog.getColor(QColor(Qt.white), self, QCoreApplication.translate('QgsOptions', 'Select color'))
             if color.isValid():
                 self.mColorSchemeList.addColor(color)
             return
@@ -805,7 +805,7 @@ class QgsOptions(QgsOptionsDialogBase):
             getattr(self, button).setEnabled(editable)
 
     def newColorPalette(self):
-        name, ok = QInputDialog.getText(self, '新建调色板', '名称')
+        name, ok = QInputDialog.getText(self, QCoreApplication.translate('QgsOptionsBase', 'Create a new palette'), QCoreApplication.translate('QgsOptionsBase', 'Name'))
         if not ok or not name.strip():
             return
         scheme = QgsUserColorScheme(name.strip())
@@ -902,7 +902,7 @@ class QgsOptions(QgsOptionsDialogBase):
         from qgis.gui import QgsRasterFormatSaveOptionsWidget, QgsRasterPyramidsOptionsWidget
         from qgis.PyQt.QtWidgets import QDialog, QDialogButtonBox, QVBoxLayout
         dialog = QDialog(self)
-        dialog.setWindowTitle('编辑创建选项')
+        dialog.setWindowTitle(QCoreApplication.translate('QgsOptionsBase', 'Edit Create Options'))
         layout = QVBoxLayout(dialog)
         if driver == '_pyramids':
             widget = QgsRasterPyramidsOptionsWidget(dialog, 'gdal')

@@ -1,7 +1,7 @@
 """Two-point profile measurement, following the upstream plot tool."""
 import math
 from qgis.PyQt import sip
-from qgis.PyQt.QtCore import Qt, QPointF, QLineF, pyqtSignal
+from qgis.PyQt.QtCore import QCoreApplication, Qt, QPointF, QLineF, pyqtSignal
 from qgis.PyQt.QtGui import QPen, QColor
 from qgis.PyQt.QtWidgets import QDialog, QFormLayout, QLabel, QGraphicsLineItem
 from qgis.core import Qgis, QgsProject, QgsSettings, QgsUnitTypes
@@ -14,7 +14,7 @@ class QgsProfileMeasureResultsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent, Qt.Tool)
         self.setObjectName('QgsProfileMeasureResultsDialog')
-        self.setWindowTitle('剖面距离')
+        self.setWindowTitle(QCoreApplication.translate('QgsProfileMeasureResultsDialog', 'Profile Distance'))
         form = QFormLayout(self)
         self.mTotalLabel, self.mDistanceLabel, self.mElevationLabel = QLabel(), QLabel(), QLabel()
         for title, label in [('总长度', self.mTotalLabel), ('Δ 距离', self.mDistanceLabel), ('Δ 高程', self.mElevationLabel)]:

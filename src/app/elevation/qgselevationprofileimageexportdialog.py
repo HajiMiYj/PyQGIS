@@ -1,5 +1,5 @@
 from qgis.PyQt import uic
-from qgis.PyQt.QtCore import QSize
+from qgis.PyQt.QtCore import QCoreApplication, QSize
 from qgis.PyQt.QtWidgets import QDialog, QMessageBox
 from qgis.gui import QgsGui
 from .qgselevationprofileexportsettingswidget import QgsElevationProfileExportSettingsWidget, UI_ROOT
@@ -27,6 +27,6 @@ class QgsElevationProfileImageExportDialog(QDialog):
         error = self.mProfileSettingsWidget.validationError()
         if self.imageSize().width() <= 0 or self.imageSize().height() <= 0: error = '图片宽高必须大于零'
         if error:
-            QMessageBox.warning(self, '导出设置', error)
+            QMessageBox.warning(self, QCoreApplication.translate('QgsLayoutWidgetBase', 'Export Settings'), error)
             return
         super().accept()

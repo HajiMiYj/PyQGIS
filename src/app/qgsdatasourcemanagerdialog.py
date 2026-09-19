@@ -1,5 +1,5 @@
 """Provider-driven source manager corresponding to qgsdatasourcemanagerdialog.cpp."""
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.PyQt.QtWidgets import QDialog, QHBoxLayout, QListWidget, QStackedWidget
 from qgis.core import QgsProviderRegistry
 from qgis.gui import QgsGui
@@ -10,7 +10,7 @@ class QgsDataSourceManagerDialog(QDialog):
         super().__init__(app)
         self.mApp = app
         self.setObjectName('QgsDataSourceManagerDialog')
-        self.setWindowTitle('数据源管理器')
+        self.setWindowTitle(QCoreApplication.translate('QgsDataSourceManagerDialog', 'Data Source Manager'))
         self.resize(1000, 680)
         layout = QHBoxLayout(self)
         self.mOptionsListWidget = QListWidget()

@@ -8,7 +8,7 @@ import json
 import math
 from pathlib import Path
 from qgis.PyQt import sip
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtWidgets import (QAction, QMenu, QMessageBox, QWidgetAction, QWidget,
     QGridLayout, QCheckBox, QComboBox, QLabel, QToolButton, QApplication)
@@ -35,7 +35,7 @@ class QgsMeshEditForceByLineAction(QWidgetAction):
         self.mCheckBoxNewVertex = QCheckBox('在相交边上添加新顶点')
         self.mCheckBoxNewVertex.setChecked(settings.value('UI/Mesh/ForceByLineNewVertex', False, type=bool))
         self.mComboInterpolateFrom = QComboBox()
-        self.mComboInterpolateFrom.addItem('网孔', self.Mesh)
+        self.mComboInterpolateFrom.addItem(QCoreApplication.translate('QgsMeshEditForceByLineAction', 'Mesh'), self.Mesh)
         self.mComboInterpolateFrom.addItem('约束线', self.Lines)
         mode = settings.value('UI/Mesh/ForceByLineInterpolateFrom', 'Mesh')
         self.mComboInterpolateFrom.setCurrentIndex(self.Lines if str(mode) in ('Lines', '1') else self.Mesh)
@@ -54,7 +54,7 @@ class QgsMeshEditForceByLineAction(QWidgetAction):
         layout.addWidget(self.mCheckBoxNewVertex, 1, 0, 1, 4)
         layout.addWidget(QLabel('Z 值插值来源'), 2, 0, 1, 3)
         layout.addWidget(self.mComboInterpolateFrom, 2, 3)
-        layout.addWidget(QLabel('容差'), 3, 0, 1, 2)
+        layout.addWidget(QLabel(QCoreApplication.translate('QgsMeshEditForceByLineAction', 'Tolerance')), 3, 0, 1, 2)
         layout.addWidget(self.mToleranceSpinBox, 3, 2)
         layout.addWidget(self.mUnitSelecionWidget, 3, 3)
         self.setDefaultWidget(widget)
@@ -178,7 +178,7 @@ class QgsMapToolEditMeshFrame(QgsMapToolAdvancedDigitizing):
         layer = self.layer()
         return layer.meshEditor() if layer is not None and layer.isEditable() else None
 
-    def warning(self, text): self.mApp.mMessageBar.pushWarning('网孔编辑', text)
+    def warning(self, text): self.mApp.mMessageBar.pushWarning(QCoreApplication.translate('QgsMapToolEditMeshFrame', 'Mesh editing'), text)
 
     def transform(self, layer):
         return QgsCoordinateTransform(layer.crs(), self.canvas().mapSettings().destinationCrs(), self.mApp.mProject)

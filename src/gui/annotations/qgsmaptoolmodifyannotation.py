@@ -1,5 +1,5 @@
 """QGIS 3.34 annotation selection, hover and native CAD edit operations."""
-from qgis.PyQt.QtCore import Qt, QEvent, pyqtSignal
+from qgis.PyQt.QtCore import QCoreApplication, Qt, QEvent, pyqtSignal
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtWidgets import QMenu
 from qgis.core import (Qgis, QgsAnnotationLayer, QgsGeometry, QgsRectangle,
@@ -181,7 +181,7 @@ class QgsMapToolModifyAnnotation(QgsMapToolAdvancedDigitizing):
         if layer is None or operation is None or layer.item(self.mSelectedItemId) is None: return False
         result = layer.applyEdit(operation)
         if result == Qgis.AnnotationItemEditOperationResult.Invalid:
-            self.mApp.mMessageBar.pushWarning('修改注记', '此注记不支持该操作，或操作会产生无效几何')
+            self.mApp.mMessageBar.pushWarning(QCoreApplication.translate('MainWindow', 'Modify Annotations'), '此注记不支持该操作，或操作会产生无效几何')
             return False
         self.mApp.mProject.setDirty(True)
         if result == Qgis.AnnotationItemEditOperationResult.ItemCleared:
@@ -270,7 +270,7 @@ class QgsMapToolModifyAnnotation(QgsMapToolAdvancedDigitizing):
                     operation = self.moveNodeOperation(event.mapPoint()) if self.mCurrentAction == self.MoveNode else self.translationOperation(self.mPressPoint, event.mapPoint())
                     self.applyOperation(operation)
                 except QgsCsException as error:
-                    self.mApp.mMessageBar.pushWarning('修改注记', '坐标转换失败：' + str(error))
+                    self.mApp.mMessageBar.pushWarning(QCoreApplication.translate('MainWindow', 'Modify Annotations'), '坐标转换失败：' + str(error))
                 finally: self.stopOperation()
             return
         if event.button() != Qt.LeftButton: return
@@ -302,7 +302,7 @@ class QgsMapToolModifyAnnotation(QgsMapToolAdvancedDigitizing):
         if self.mCurrentAction != self.NoAction or not self.pick(event.mapPoint()): return
         self.mSelectedNode = self.nearestNode(event.mapPoint())
         menu = QMenu(self.mApp)
-        menu.addAction('注记属性', self.showProperties)
+        menu.addAction(QCoreApplication.translate('QgsAnnotationCommonPropertiesWidgetBase', 'Annotation Properties'), self.showProperties)
         if self.mSelectedNode is not None: menu.addAction('删除节点', self.deleteNode)
         layer = self.selectedLayer()
         item = layer.item(self.mSelectedItemId) if layer else None
@@ -336,7 +336,7 @@ class QgsMapToolModifyAnnotation(QgsMapToolAdvancedDigitizing):
         if not self.updateHoveredItem(event.mapPoint()): return
         if (self.mHoveredItemLayerId, self.mHoveredItemId) == (self.mSelectedItemLayerId, self.mSelectedItemId):
             try: self.addNode(event.mapPoint())
-            except QgsCsException as error: self.mApp.mMessageBar.pushWarning('修改注记', str(error))
+            except QgsCsException as error: self.mApp.mMessageBar.pushWarning(QCoreApplication.translate('MainWindow', 'Modify Annotations'), str(error))
         else:
             self.selectHoveredItem()
             self.showProperties()
@@ -387,7 +387,7 @@ class QgsMapToolModifyAnnotation(QgsMapToolAdvancedDigitizing):
         elif key in (Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down) and self.mSelectedItemId:
             if self.mCurrentAction == self.NoAction and self.mBounds is not None:
                 try: self.translateItem(*self.deltaForKeyEvent(event))
-                except QgsCsException as error: self.mApp.mMessageBar.pushWarning('修改注记', str(error))
+                except QgsCsException as error: self.mApp.mMessageBar.pushWarning(QCoreApplication.translate('MainWindow', 'Modify Annotations'), str(error))
             event.ignore()
         else: super().keyPressEvent(event)
 

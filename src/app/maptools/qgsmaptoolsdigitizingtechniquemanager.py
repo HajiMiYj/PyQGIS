@@ -128,7 +128,7 @@ class QgsMapToolsDigitizingTechniqueManager:
         if toolId not in self.SHAPE_TOOLS: toolId = 'circle-from-2-points'
         parent = self.captureTool()
         if parent is None:
-            app.mMessageBar.pushWarning('形状数字化', '请先使线/面矢量图层进入编辑状态，或启用支持形状的注记捕获工具')
+            app.mMessageBar.pushWarning(QCoreApplication.translate('MainWindow', 'Digitize Shape'), '请先使线/面矢量图层进入编辑状态，或启用支持形状的注记捕获工具')
             self.updateActions()
             return
         canvas.setMapTool(parent)
@@ -162,7 +162,7 @@ class QgsMapToolsDigitizingTechniqueManager:
             parent.canvasReleaseEvent(event)
         else:
             parent.stopCapturing()
-            self.mApp.mMessageBar.pushWarning('形状数字化', '无法将形状转换到目标图层坐标系')
+            self.mApp.mMessageBar.pushWarning(QCoreApplication.translate('MainWindow', 'Digitize Shape'), '无法将形状转换到目标图层坐标系')
         if canvas.mapTool() is parent and self.parentAvailable(parent):
             canvas.setMapTool(tool)
         self.updateActions()

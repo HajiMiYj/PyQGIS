@@ -1,7 +1,7 @@
 """QgsLabelPropertyDialog using the original 3.34 Designer form and widget names."""
 from pathlib import Path
 from qgis.PyQt import uic
-from qgis.PyQt.QtCore import Qt, pyqtSignal, QUrl
+from qgis.PyQt.QtCore import QCoreApplication, Qt, pyqtSignal, QUrl
 from qgis.PyQt.QtGui import QColor, QFont, QFontDatabase, QDesktopServices
 from qgis.PyQt.QtWidgets import QDialog, QDialogButtonBox, QMenu
 from qgis.core import QgsPalLayerSettings as Pal
@@ -96,7 +96,7 @@ class QgsLabelPropertyDialog(QDialog):
         self.mCurLabelField = -1 if settings.isExpression else details.layer.fields().lookupField(settings.fieldName)
         self.mLabelTextLineEdit.setText(details.pos.labelText if self.mCurLabelField < 0 else str(feature[self.mCurLabelField]))
         self.mLabelTextLineEdit.setEnabled(self.mCurLabelField >= 0)
-        if settings.isExpression: self.mLabelTextLabel.setText('表达式结果')
+        if settings.isExpression: self.mLabelTextLabel.setText(QCoreApplication.translate('QgsLabelPropertyDialog', 'Expression result'))
         self.mLabelTextLineEdit.textChanged.connect(self.labelTextChanged)
         self.buttonBox.button(QDialogButtonBox.Apply).clicked.connect(self.applied)
         self.buttonBox.helpRequested.connect(lambda: QDesktopServices.openUrl(QUrl('https://docs.qgis.org/3.34/en/docs/user_manual/working_with_vector/vector_properties.html#label-toolbar')))

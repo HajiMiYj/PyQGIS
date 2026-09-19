@@ -1,7 +1,7 @@
 """Port of src/plugins/offline_editing/offline_editing_plugin_gui.cpp."""
 from pathlib import Path
 from qgis.PyQt import uic
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.PyQt.QtWidgets import QDialog, QFileDialog, QMessageBox, QHeaderView
 from qgis.core import QgsProject, QgsSettings, QgsApplication, QgsLayerTree, QgsLayerTreeModel, QgsOfflineEditing
 from qgis.gui import QgsGui, QgsHelp
@@ -96,7 +96,7 @@ class QgsOfflineEditingPluginGui(QDialog):
     def buttonBoxAccepted(self):
         if (Path(self.mOfflineDataPath) / self.mOfflineDbFile).exists():
             answer = QMessageBox.question(
-                self, '离线编辑插件',
+                self, QCoreApplication.translate('QgsOfflineEditingPluginGui', 'Offline Editing Plugin'),
                 f'正在转换为离线工程。\n离线数据库文件“{self.mOfflineDbFile}”已存在。是否覆盖？',
                 QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel)
             if answer != QMessageBox.Yes:

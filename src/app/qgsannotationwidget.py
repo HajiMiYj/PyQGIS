@@ -1,7 +1,7 @@
 """QgsAnnotationWidget: original common annotation UI and native symbol buttons."""
 from pathlib import Path
 from qgis.PyQt import uic, sip
-from qgis.PyQt.QtCore import pyqtSignal, QUrl
+from qgis.PyQt.QtCore import QCoreApplication, pyqtSignal, QUrl
 from qgis.PyQt.QtGui import QDesktopServices
 from qgis.PyQt.QtWidgets import QWidget, QDialog, QDialogButtonBox
 from qgis.core import Qgis, QgsMargins, QgsProject, QgsSettings
@@ -65,7 +65,7 @@ class _QgsAnnotationDialog(QDialog):
         QgsGui.enableAutoGeometryRestore(self)
         self.mButtonBox.button(QDialogButtonBox.Apply).clicked.connect(self.applySettingsToItem)
         self.mButtonBox.helpRequested.connect(lambda: QDesktopServices.openUrl(QUrl('https://docs.qgis.org/3.34/en/docs/user_manual/map_views/map_view.html#sec-annotations')))
-        self.mDeleteButton = self.mButtonBox.addButton('删除', QDialogButtonBox.ActionRole)
+        self.mDeleteButton = self.mButtonBox.addButton(QCoreApplication.translate('DbManagerDlgSqlLayerWindow', 'Delete'), QDialogButtonBox.ActionRole)
         self.mDeleteButton.clicked.connect(self.deleteItem)
         self.mEmbeddedWidget.changed.connect(self.onSettingsChanged)
 

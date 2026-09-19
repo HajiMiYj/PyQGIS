@@ -2,7 +2,7 @@
 from pathlib import Path
 from qgis.PyQt import uic
 from qgis.PyQt.QtWidgets import QDialog, QDialogButtonBox, QMessageBox, QProgressDialog
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.core import QgsProject, QgsRectangle, QgsRasterLayer, QgsCoordinateTransform, QgsFeedback, QgsApplication
 from qgis.analysis import QgsRasterCalculatorEntry, QgsRasterCalculator, QgsRasterCalcNode
 from qgis.gui import QgsFileWidget
@@ -74,14 +74,14 @@ class QgsRasterCalcDialog(QDialog):
         return node is not None
     def setAcceptButtonState(self, *args):
         valid = self.expressionValid()
-        self.mExpressionValidLabel.setText('表达式有效' if valid else '表达式无效')
+        self.mExpressionValidLabel.setText(QCoreApplication.translate('QgsRasterCalcDialog', 'Expression valid') if valid else QCoreApplication.translate('QgsRasterCalcDialog', 'Expression invalid'))
         self.mButtonBox.button(QDialogButtonBox.Ok).setEnabled(valid and bool(self.mOutputLayer.filePath()))
     def accept(self):
         if not self.expressionValid() or self.outputRectangle().isEmpty() or min(self.numberOfColumns(), self.numberOfRows()) <= 0:
-            QMessageBox.warning(self, '栅格计算器', '请检查表达式、输出范围和行列数')
+            QMessageBox.warning(self, QCoreApplication.translate('QgsRasterCalcDialogBase', 'Raster Calculator'), '请检查表达式、输出范围和行列数')
             return
         if Path(self.outputFile()).exists() and QMessageBox.question(self, '覆盖文件', self.outputFile(), QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes: return
-        progress = QProgressDialog('正在计算…', '取消', 0, 100, self)
+        progress = QProgressDialog('正在计算…', QCoreApplication.translate('DbManagerDlgSqlWindow', 'Cancel'), 0, 100, self)
         progress.setWindowModality(Qt.WindowModal)
         feedback = QgsFeedback()
         progress.canceled.connect(feedback.cancel)

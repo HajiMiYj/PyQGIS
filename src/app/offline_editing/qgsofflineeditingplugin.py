@@ -4,6 +4,7 @@ The native plugin is a C++ core plugin that only wires QgsOfflineEditing to two
 actions plus a progress dialog, so it is reproduced here in Python. That keeps
 the two database-toolbar entry points working without loading the C++ DLL.
 """
+from qgis.PyQt.QtCore import QCoreApplication
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
 from qgis.core import QgsProject, QgsOfflineEditing
@@ -40,7 +41,7 @@ class QgsOfflineEditingPlugin:
         iface.addDatabaseToolBarIcon(self.mActionConvertProject)
         iface.addPluginToDatabaseMenu('离线编辑', self.mActionConvertProject)
 
-        self.mActionSynchronize = QAction(QIcon(), '同步', self.mApp)
+        self.mActionSynchronize = QAction(QIcon(), QCoreApplication.translate('QgsOfflineEditingPlugin', 'Synchronize'), self.mApp)
         self.mActionSynchronize.setObjectName('mActionSynchronize')
         self.mActionSynchronize.setWhatsThis('将离线工程与远程图层同步')
         self.mActionSynchronize.triggered.connect(lambda: self.synchronize())

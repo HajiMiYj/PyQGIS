@@ -1,4 +1,5 @@
 """Application editing policy; counterpart of qgsguivectorlayertools.cpp."""
+from qgis.PyQt.QtCore import QCoreApplication
 from qgis.core import QgsVectorLayerTools, QgsVectorLayerUtils, QgsGeometry, QgsSettings
 from qgis.gui import QgsAttributeDialog, QgsAttributeEditorContext
 from qgis.PyQt.QtWidgets import QMessageBox
@@ -27,7 +28,7 @@ class QgsGuiVectorLayerTools(QgsVectorLayerTools):
             buttons = QMessageBox.Save | QMessageBox.Discard
             if allowCancel:
                 buttons |= QMessageBox.Cancel
-            answer = QMessageBox.question(self.mApp, '保存图层编辑', layer.name(), buttons, QMessageBox.Save)
+            answer = QMessageBox.question(self.mApp, QCoreApplication.translate('MainWindow', 'Save Layer Edits'), layer.name(), buttons, QMessageBox.Save)
             if answer == QMessageBox.Cancel:
                 return False
             if answer == QMessageBox.Save:
