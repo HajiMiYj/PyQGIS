@@ -1,12 +1,18 @@
-# QGIS Python 3.34.10：桌面应用层的源码级移植
+# QGIS Python 3.34.10
 
-本项目用 **PyQGIS + PyQt5** 在 OSGeo4W 上实现 QGIS 3.34.10 的**桌面应用层**：`main.py` 是程序入口，`src/app` 与 `src/gui` 里放的是上游 `src/app/*.cpp`、`src/gui/*.cpp` 在 Python 中的对应实现。
+本项目用 **PyQGIS + PyQt5** 在 OSGeo4W 上实现 QGIS 3.34.10 的**桌面应用层**：`main.py` 是程序入口，`src/app` 与 `src/gui` 里放的是QGIS源代码中 `src/app/*.cpp`、`src/gui/*.cpp` 在 Python 中的对应实现。
 内核直接使用 OSGeo4W 的 `qgis-ltr`：`qgis.core`、`qgis.gui`、`qgis.PyQt` 都是原生二进制与绑定。
-移植基准是 QGIS `final-3_34_10` 源码树，写法遵循一条主线：**有 PyQGIS 绑定的类直接调用原生实现；没有绑定的，照 C++ 源码在 Python 里复刻同样的行为与命名。**
+移植基准是 QGIS `final-3_34_10` 源码树，写法遵循的原则为：**有 PyQGIS 绑定的类直接调用原生实现；没有绑定的，照 C++ 源码在 Python 里复刻同样的行为与命名。**
+
+> [!NOTE]
+>
+> 注意，QGIS的3D与GPS功能实在是与作者目前需要做的事或感兴趣的内容毫无关系，所以此项目作者拒绝复刻这两个功能
+
+
 
 | 指标 | 现状 |
 | --- | --- |
-| 上游 action 覆盖 | 222 条中已接入 216 条 |
+| QGIS源代码 action 覆盖 | 222 条中已接入 216 条 |
 | 已接入 | **216 条** |
 | 部分实现 | 1 条（`mActionDwgImport`，见 [§9](#9-已知差异与限制)） |
 | UI 占位（隐藏插入锚点） | 1 条（`mActionAddLayerSeparator`） |
@@ -16,7 +22,7 @@
 | 选项页面 | 26 页 |
 | 代码规模 | `src/app` 186 个模块、`src/gui` 12 个、`src/ui` 50 个 `.ui` |
 
-> `main.py` 是应用入口；`src/app` 与 `src/gui` 里的模块与上游 C++ 文件一一对应。
+> `main.py` 是应用入口；`src/app` 与 `src/gui` 里的模块与QGIS源代码 C++ 文件一一对应。
 
 ---
 
@@ -39,7 +45,7 @@
 
 ## 1. 项目定位与覆盖范围
 
-**做的是什么**：一个可以独立启动的 QGIS 桌面程序。打开 `main.py` 启动后，你会得到菜单栏、工具栏、状态栏、图层面板、地图画布、26 页选项对话框、欢迎页、启动画面、Python 控制台、地理配准窗口、DWG/DXF 导入、网格与注记编辑、高程剖面、报表、界面自定义等完整界面，行为与上游 C++ 实现对齐。
+**做的是什么**：一个可以独立启动的 QGIS 桌面程序。打开 `main.py` 启动后，你会得到菜单栏、工具栏、状态栏、图层面板、地图画布、26 页选项对话框、欢迎页、启动画面、Python 控制台、地理配准窗口、DWG/DXF 导入、网格与注记编辑、高程剖面、报表、界面自定义等完整界面，行为与QGIS源代码 C++ 实现对齐。
 
 **代码怎么分层**：
 
@@ -48,12 +54,25 @@
 | 内核 | `qgis.core` / `qgis.gui` / `qgis.PyQt`（OSGeo4W 原生二进制） | OSGeo4W `apps/qgis-ltr` |
 | 应用层 | 启动流程、主窗口、动作绑定、选项、各功能窗口与工具 | 本仓库 `main.py` + `src/app` |
 | 补缺的界面类 | PyQGIS 未暴露、由本项目按 C++ 复刻的 gui 类 | 本仓库 `src/gui` |
-| 界面资源 | 上游 `.ui` 表单、图标、启动图、自定义目录 XML | `src/ui`、`images`、`resources` |
+| 界面资源 | QGIS源代码 `.ui` 表单、图标、启动图、自定义目录 XML | `src/ui`、`images`、`resources` |
 | 插件 | Processing、DB Manager、MetaSearch、GRASS/OTB provider 等原版插件 | OSGeo4W `apps/qgis-ltr/python/plugins` |
 
-**覆盖范围**：主窗口 `.ui` 声明的全部 action，以及上游 C++ 运行时动态创建的工具栏/菜单/接口动作。
+**覆盖范围**：主窗口 `.ui` 声明的全部 action，以及QGIS源代码 C++ 运行时动态创建的工具栏/菜单/接口动作。
 **范围外**：3D 地图视图与 GPS/GPX 入口共 4 条 action，该决定记录在 `scripts/sync_upstream.py` 的 `OUT_OF_SCOPE_ACTIONS`，因此重新生成清单时它们始终是"排除"而不会变成待办。
 **唯一的部分实现**：DWG 导入（GDAL CAD 后端只支持 R2000 及更早版本），细节见 [§9](#9-已知差异与限制)。
+
+**代码量**：
+
+| 语言       | 文件数   | 空白行   | 注释行   | 代码行     |
+| :--------- | :------- | :------- | :------- | :--------- |
+| Python     | 207      | 2385     | 1246     | 355115     |
+| Qt         | 50       | 7        | 0        | 22355      |
+| XML        | 12       | 0        | 0        | 5937       |
+| SVG        | 960      | 18       | 5        | 3502       |
+| Markdown   | 1        | 159      | 0        | 471        |
+| DOS 批处理 | 2        | 0        | 0        | 12         |
+| INI        | 2        | 1        | 0        | 7          |
+| **合计**   | **1234** | **2570** | **1251** | **387399** |
 
 ---
 
@@ -133,7 +152,7 @@ python main.py --help                  # 全部参数
 ```
 qgis_python/
 ├─ main.py                      唯一入口，对应原生 src/app/main.cpp（启动时序见 §6.1）
-├─ LICENSE                      GPL-3.0（与上游 QGIS 一致）
+├─ LICENSE                      GPL-3.0（与QGIS源代码 QGIS 一致）
 ├─ src/
 │  ├─ app/                      对应原生 src/app/*.cpp：应用层，主要开发区（186 个模块）
 │  │  ├─ qgisapp.py             主窗口控制器，对应 qgisapp.cpp/.h（动作绑定见 §4）
@@ -147,10 +166,10 @@ qgis_python/
 │  │  ├─ decorations/  dwg/  elevation/  georeferencer/  labeling/  layout/
 │  │  └─ maptools/  mesh/  vertextool/  annotations/  locator/  offline_editing/  pluginmanager/
 │  ├─ gui/                      对应原生 src/gui：PyQGIS 未暴露的 gui 类在此复刻（12 个）
-│  ├─ ui/                       50 个上游 .ui + 5 个预编译 ui_*.py
+│  ├─ ui/                       50 个QGIS源代码 .ui + 5 个预编译 ui_*.py
 │  └─ __init__.py
 ├─ python/                      随包发布的 Python 控制台副本（console/、plugins/）
-├─ images/                      上游图标与启动图资源
+├─ images/                      QGIS源代码图标与启动图资源
 ├─ resources/                   customization.xml 等
 ├─ scripts/                     构建脚本：build-resources.cmd、build-ui.cmd
 ├─ output/                      运行与检查的产物：状态报告、截图、临时目录（被忽略）
@@ -165,7 +184,7 @@ qgis_python/
 
 ### 4.1 三步定位法
 
-界面上每个控件都来自上游 `.ui`，对象名以 `mAction` 开头（如 `mActionNewProject`）。定位永远是这三步：
+界面上每个控件都来自QGIS源代码 `.ui`，对象名以 `mAction` 开头（如 `mActionNewProject`）。定位永远是这三步：
 
 1. **拿到对象名**：在 `src/ui/qgisapp.ui` 里搜中文/英文标题，读出该控件的 `objectName`（形如 `mActionXxx`）；
 2. **找绑定**：在 `src/app/qgisapp.py` 搜这个名字，看它绑到哪个 Python 方法；
@@ -282,7 +301,7 @@ self.mDynamicActions['qgisapp:actionDocumentation'] = dict(
 ### 4.5 实例四：一条界面文字是怎么被翻译的
 
 1. 界面文字分两类：`.ui` 表单里的（uic 生成的上下文是 `<页面类名>Base`），代码里写的（`self.tr(...)`，上下文是当前类名）。
-2. 代码里的原生字符串统一写成显式上下文，便于与上游 `.ts` 对齐：
+2. 代码里的原生字符串统一写成显式上下文，便于与QGIS源代码 `.ts` 对齐：
 
    ```python
    self.mPanelMenu = self.mViewMenu.addMenu(QCoreApplication.translate('QgisApp', 'Panels'))
@@ -320,10 +339,10 @@ self.mDynamicActions['qgisapp:actionDocumentation'] = dict(
 
 ---
 
-## 5. 移植方法论（硬规则）
+## 5. 移植方法的原则
 
 1. **优先用 PyQGIS 绑定**。`qgis.core` / `qgis.gui` 里有的类直接实例化。
-2. **没有绑定就照 C++ 复刻**。类名、方法名、信号名、参数顺序与语义对齐上游；docstring 写明"对应 xxx.cpp 的 xxx()"。
+2. **没有绑定就照 C++ 复刻**。类名、方法名、信号名、参数顺序与语义对齐QGIS源代码；docstring 写明"对应 xxx.cpp 的 xxx()"。
 3. **不写伪替身**。空壳类会掩盖真实缺口；确实受后端限制（如 DWG 版本）时在 [§9](#9-已知差异与限制) 写明原因。
 4. **注释引用原生位置**。方便后来者对照源码验证：
 
@@ -359,7 +378,7 @@ self.mDynamicActions['qgisapp:actionDocumentation'] = dict(
 | 样式选择（`qgis/style`、非默认主题强制 fusion、adwaita 拒绝） | `main.py` 样式块 | `main.cpp:1440-1475` |
 | 主题应用 `QgsApplication.setUITheme()` | `main.py` | `QgisApp::setTheme()` → `QgsApplication::setUITheme()` |
 | 本地化（命令行 → 用户覆盖 → 系统 locale） | `main.py` locale 块 | `main.cpp` locale 块 |
-| 启动画面（尺寸/遮罩/居中） | `main.py` splash 块 | `main.cpp:1483-1509`（上游已注释，语义保留） |
+| 启动画面（尺寸/遮罩/居中） | `main.py` splash 块 | `main.cpp:1483-1509`（QGIS源代码已注释，语义保留） |
 | 构造主窗口：分阶段启动消息、欢迎页、最近工程、文件过滤器、图标尺寸… | `src/app/qgisapp.py::__init__` | `qgisapp.cpp` 构造函数 |
 | `show()` → `completeInitialization()` → `fileOpenAfterLaunch()` | `main.py` 尾部 | `main.cpp:1787-1793` |
 | 退出：保存窗口状态、卸载插件、`exitQgis()` | `qgisapp.py::saveWindowState/closeEvent/fileExit` | `QgisApp` 同名方法 |
@@ -405,8 +424,8 @@ self.mDynamicActions['qgisapp:actionDocumentation'] = dict(
 | `qgsversioninfo.py` | `qgsversioninfo.cpp` | 版本检查（`https://version.qgis.org/version.txt`） |
 
 - 存储与原生同键：`UI/recentProjects/N`（`title/path/previewImage/crs/pin`），含 `UI/recentProjectsList` 旧键迁移、`maxRecentProjects`（默认 20）截断、固定项置顶且不参与截断、保存工程时生成 250×177 预览图。
-- 欢迎页在上游 3.34 被整体注释（`qgisapp.cpp:1089-1132`），端口按类与设置项的原义实现出来，"启动时打开工程 = 欢迎页"才有落点。
-- "New Empty Project" 行走 `fileNewBlank()`：上游这里写的是 `QgisApp::instance()->newProject()`，而 `newProject` 是信号，C++ 里那行只是发射信号；端口走真正的新建工程路径。
+- 欢迎页在QGIS源代码 3.34 被整体注释（`qgisapp.cpp:1089-1132`），端口按类与设置项的原义实现出来，"启动时打开工程 = 欢迎页"才有落点。
+- "New Empty Project" 行走 `fileNewBlank()`：QGIS源代码这里写的是 `QgisApp::instance()->newProject()`，而 `newProject` 是信号，C++ 里那行只是发射信号；端口走真正的新建工程路径。
 
 ### 6.5 启动画面（分阶段消息）
 
@@ -435,7 +454,7 @@ Initializing file filters → Restoring window state → Populate saved styles �
 
 ### 6.8 面板与窗口状态持久化
 
-- 布局在**首次 show** 时恢复（Qt `QTBUG-89034`，上游同样把 `restoreState()` 挪到 `showEvent`），退出时经 `aboutToQuit → saveWindowState()` 写 `UI/state`、`UI/geometry`；无保存时用 `src/app/ui_defaults.py` 的默认布局。
+- 布局在**首次 show** 时恢复（Qt `QTBUG-89034`，QGIS源代码同样把 `restoreState()` 挪到 `showEvent`），退出时经 `aboutToQuit → saveWindowState()` 写 `UI/state`、`UI/geometry`；无保存时用 `src/app/ui_defaults.py` 的默认布局。
 - **延迟创建的 dock 需要额外处理**：`restoreState()` 只能恢复已存在的 dock。Python 控制台的宿主基类还依赖无法从 PyQt 设置的静态钩子，因此：
   - `src/app/qgspythonconsole.py` 用端口自己的 `QgsDockableWidgetHelper` 完成停靠，并保留控制台要求的契约 `dockToggleButton()/isUserVisible()/setUserVisible()/activate()`（控制台工具栏会调用 `parent.dockToggleButton()`）；
   - `UI/pythonConsoleVisible` 记录可见性，`showEvent()` 中**先重建控制台再 `restoreState()`**，停靠区域与几何由 `UI/state` 恢复；
@@ -460,11 +479,11 @@ Initializing file filters → Restoring window state → Populate saved styles �
 
 ---
 
-## 7. 代码规范与红线
+## 7. 代码规范
 
 **风格**
 
-- 方法用 `camelCase`，与上游 QGIS 命名一致。
+- 方法用 `camelCase`，与QGIS源代码 QGIS 命名一致。
 - 紧凑单行（`if x: return y`）贴近 C++ 原版密度，逻辑复杂时才展开。
 - 面向用户的文案：原生字符串走 `translate()`，端口自创文案用中文。
 - 新模块开头一句 docstring，写明对应原生哪个文件。
@@ -523,6 +542,7 @@ offscreen 平台没有字体目录，属正常噪声；不要基于离屏字体�
 | 端口自创文案 | 保持中文 | 改成 `tr()` 会在中文界面显示英文；若要英文界面，应把这些文案的英文源串补进翻译目录 |
 | `QgsGui::nativePlatformInterface()` | 用 `QDesktopServices` 等价实现 | 该单例未绑定；"打开所在目录"等行为等价，调用路径不同 |
 | Processing 提供者可执行性 | 取决于环境 | 例如 GRASS/OTB 需要各自安装与配置（见 FAQ）；端口负责注册与选项页，执行能力由 OSGeo4W 组件决定 |
+| **本地化** | 用户界面语言项，统一取消了用户界面语言的旗帜的显示 | **存在项目作者个人不认可的旗帜** |
 
 ---
 
@@ -557,9 +577,9 @@ offscreen 平台没有字体目录，属正常噪声；不要基于离屏字体�
 
 **外部参考**
 
-- PyQGIS API：<https://qgis.org/pyqgis/3.34/>
+- PyQGIS API：<https://github.com/qgis/pyqgis-api-docs-builder/releases/download/3.34/pyqgis-docs-3.34.zip/>，注意，3.34版本的API已经不让在线查看了，你得下载
 - QGIS 源码：<https://github.com/qgis/QGIS/tree/final-3_34_10>
-- Qt 5.15（`QMainWindow::saveState/restoreState`、`QDockWidget`）：<https://doc.qt.io/qt-5/>
+- Qt 5.15：<https://doc.qt.io/qt-5/>
 
 **仓库内入口速查**
 
@@ -614,5 +634,8 @@ offscreen 平台没有字体目录，属正常噪声；不要基于离屏字体�
 | 本地化（语言列表、覆盖开关、249 条原生字符串翻译） | 设置 → 选项 → 常规 → 本地化语言环境 |
 | 主题与样式（`UI/UITheme`、`qgis/style`、fusion 规则、图标尺寸） | 设置 → 选项 → 常规 → 应用程序 |
 
-> 说明：表中的子系统均已接入并在当前环境验证；第三方插件、服务器连接与各类数据格式建议用实际数据再验证一次。
+> 说明：
+>
+> 1. 表中的子系统均已接入并在当前环境验证；第三方插件、服务器连接与各类数据格式建议用实际数据再验证一次。
+>
 > 2. 矩阵说明的是"该功能由哪项检查覆盖"。检查通过表示该批行为在当前环境验证通过，第三方插件、服务器连接、各类数据格式仍建议用实际数据验证。
