@@ -541,10 +541,11 @@ foreach ($f in $flags) {
 
 ### 7.6 注意：`tests/` 与 `docs/` 未入库
 
-`.gitignore` 排除了 `tests/`、`docs/`、`output/`、`.runtime/`、`images/images_rc.py`、`src/ui/ui_*.py`。也就是：
+`.gitignore` 排除了 `tests/`、`docs/`、`output/`、`.runtime/`、`images/images_rc.py`、`src/ui/ui_*.py`。也就是说：
 
-- 克隆仓库后没有检查套件与审计数据，需要自行保留/生成（按 §7.5 的约定编写即可被 `check.py` 调度）；
-- `docs/*.json` 由 [§8](#8-状态文档与脚本) 的脚本生成，`功能移植清单.md` 由程序启动时生成，两者都不要手工编辑。
+- 克隆仓库后没有检查套件与审计数据，需要自行保留/生成（按 §7.5 的约定编写即可被 `check.py` 调度）。此时运行检查会直接得到一行提示而不是堆栈：`check.py` 在构造窗口之前就用 `find_spec()` 确认检查模块存在，缺失即退出（`未找到检查模块 …，tests/ 与 docs/ 不随仓库提供`）。
+- `docs/*.json` 由 [§8](#8-状态文档与脚本) 的脚本生成，`功能移植清单.md` 由程序启动时生成，两者都不要手工编辑。缺 `docs/upstream-actions.json` 时应用仍可启动（`createActions()` 会回退到从当前 UI 自动发现动作，并在日志里给出提示），只是状态台账的基线由清单文件改为自动发现。
+- 检查与应用是分开的：`main.py` 不 import `check.py` 也不 import `tests/`，删除或保留 `tests/` 都不影响应用启动。
 
 ---
 

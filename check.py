@@ -14,6 +14,7 @@ tests/src/python/ 下对应模块的 run()/runReport()，把报告写到 output/
 import argparse
 import json
 from importlib import import_module
+from importlib.util import find_spec
 from pathlib import Path
 import sys
 import traceback
@@ -48,6 +49,10 @@ CHECKS = (
     ('--labeling-test', 'test_qgisapp_labeling', 'runReport'),
 )
 DEFAULT_CHECK = ('test_qgisapp', 'run')
+MISSING_MODULES = (
+    '未找到检查模块 {name}。\n'
+    'tests/ 与 docs/ 不随仓库提供（见 README §7.6），请在带有 tests/ 的工作副本上运行检查。'
+)
 
 
 def parseArguments(argv=None):
@@ -66,8 +71,19 @@ def selectedCheck(args):
     return 'check.json', DEFAULT_CHECK[0], DEFAULT_CHECK[1]
 
 
-def runCheck(reportName, module, entry, window):
-    check = getattr(import_module('tests.src.python.' + module), entry)
+def resolveCheck(module, entry):
+    """在构造应用之前确认检查模块存在，避免白启动一次窗口。"""
+    name = 'tests.src.python.' + module
+    try:
+        available = find_spec(name) is not None
+    except ModuleNotFoundError:
+        available = False
+    if not available:
+        raise SystemExit(MISSING_MODULES.format(name=name))
+    return getattr(import_module(name), entry)
+
+
+def runCheck(check, reportName, window):
     report = check(window)
     report['runtimeErrors'] = window.runtimeErrors
     if window.runtimeErrors:
@@ -81,11 +97,12 @@ def runCheck(reportName, module, entry, window):
 def main(argv=None):
     args = parseArguments(argv)
     reportName, module, entry = selectedCheck(args)
+    check = resolveCheck(module, entry)
 
     def onReady(app, window, context):
         def run():
             try:
-                runCheck(reportName, module, entry, window)
+                runCheck(check, reportName, window)
                 window.prepareToQuit()
                 app.exit(0)
             except Exception:
