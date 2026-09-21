@@ -1,4 +1,7 @@
-"""Python counterpart of src/app/main.cpp. Requires OSGeo4W QGIS 3.34.10."""
+"""Python counterpart of src/app/main.cpp. Requires OSGeo4W QGIS 3.34.10.
+
+Run it with the OSGeo4W interpreter:  python-qgis-ltr.bat main.py
+"""
 import argparse
 import json
 import os
@@ -8,7 +11,9 @@ import traceback
 
 from PyQt5.QtGui import QIcon
 
-ROOT = Path(__file__).resolve().parents[2]
+# main.py lives in the repository root, which has to be importable for
+# "from src.app..." and the images/resources packages.
+ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 
@@ -29,7 +34,7 @@ def resolveProfile(args):
         root = QgsUserProfileManager.resolveProfilesFolder(str(Path(folder).parent))
         return folder, Path(folder).name, root, False, ''
 
-    if args.smoke_test and not args.profile and not args.profiles_path:
+    if args.check and not args.profile and not args.profiles_path:
         folder = str(ROOT / '.runtime/profile')
         root = QgsUserProfileManager.resolveProfilesFolder(str(ROOT / '.runtime'))
         return folder, 'default', root, False, ''
@@ -74,7 +79,7 @@ def resolveProfile(args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('project', nargs='?')
-    parser.add_argument('--smoke-test', action='store_true')
+    parser.add_argument('--check', action='store_true', help='运行内置检查（默认套件）后退出')
     parser.add_argument('--labeling-test', action='store_true', help='Run only the label-toolbar integration checks')
     parser.add_argument('--annotation-test', action='store_true', help='Run annotation and embedded-group integration checks')
     parser.add_argument('--data-actions-test', action='store_true', help='Run DXF, SpatiaLite and mesh action integration checks')
@@ -103,19 +108,14 @@ def main():
     if args.customizationfile:
         args.customizationfile = str(Path(args.customizationfile).resolve())
         if not Path(args.customizationfile).is_file(): parser.error('Customization INI file does not exist')
-    if args.customization_test or args.mesh_edit_test or args.mesh_calculator_test or args.dwg_import_test or args.georeferencer_test or args.statusbar_test or args.layertree_test or args.startup_test or args.profile_test: args.smoke_test = True
-    args.smoke_test = args.smoke_test or args.labeling_test or args.annotation_test or args.data_actions_test or args.toolbar_test or args.shape_test or args.remaining_actions_test or args.view_actions_test or args.decoration_test or args.partial_actions_test or args.trim_extend_test
-    def stage(name):
-        if args.smoke_test:
-            path = ROOT / '.runtime/smoke-stages.txt'
-            path.parent.mkdir(exist_ok=True)
-            with path.open('a', encoding='utf-8') as stream: stream.write(name + '\n')
-    stage('start')
+    if args.customization_test or args.mesh_edit_test or args.mesh_calculator_test or args.dwg_import_test or args.georeferencer_test or args.statusbar_test or args.layertree_test or args.startup_test or args.profile_test: args.check = True
+    args.check = args.check or args.labeling_test or args.annotation_test or args.data_actions_test or args.toolbar_test or args.shape_test or args.remaining_actions_test or args.view_actions_test or args.decoration_test or args.partial_actions_test or args.trim_extend_test
     from qgis.PyQt.QtCore import Qt, QTranslator, QTimer, QSettings, QLocale
 
-    if args.smoke_test:
+    if args.check:
+        # Checks keep their own QSettings tree so they never touch the user's profile.
         QSettings.setDefaultFormat(QSettings.IniFormat)
-        QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(ROOT / '.runtime/smoke-settings'))
+        QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(ROOT / '.runtime/check-settings'))
     from qgis.core import QgsApplication, Qgis, QgsSettings, QgsProject
     from qgis.gui import QgsGui
     # if Qgis.QGIS_VERSION_INT != 33410:
@@ -155,10 +155,10 @@ def main():
     from qgis.PyQt.QtWidgets import QSplashScreen
     # Splash screen. Upstream 3.34.10 has this block commented out, but Options
     # still exposes qgis/hideSplash and main.cpp still documents --nologo, so the
-    # desktop port keeps it and honours both switches. Sizing, mask and the
+    # desktop port keeps it and honors both switches. Sizing, mask and the
     # staged messages follow the native QSplashScreen setup.
     splash = None
-    if not args.smoke_test and not args.nologo and not QgsSettings().value('qgis/hideSplash', False, type=bool):
+    if not args.check and not args.nologo and not QgsSettings().value('qgis/hideSplash', False, type=bool):
         splashPixmap = QPixmap(str(ROOT / 'images/splash/splash.png'))
         if not splashPixmap.isNull():
             screen = QGuiApplication.primaryScreen()
@@ -251,17 +251,19 @@ def main():
     from src.app.qgisapp import QgisApp
     window = QgisApp(customization=not args.nocustomization, customizationFile=args.customizationfile,
                      rootProfileFolder=rootProfileFolder, profileName=profileName,
-                     splash=splash, skipVersionCheck=args.smoke_test)
+                     splash=splash, skipVersionCheck=args.check)
     # Qt replaces the top level style with a QStyleSheetStyle once the theme
     # stylesheet is set, so keep the installed proxy for introspection.
     window.mAppStyle = appStyle
-    originalHook = sys.excepthook
+
     def exceptionHook(kind, value, tb):
+        """Surface unhandled exceptions in the message bar and the log panel."""
         detail = ''.join(traceback.format_exception(kind, value, tb))
         sys.__stderr__.write(detail)
         window.mMessageBar.pushCritical('Python', str(value))
         QgsApplication.messageLog().logMessage(detail, 'Python', Qgis.Critical)
         window.runtimeErrors.append(detail)
+
     sys.excepthook = exceptionHook
     window.show()
     if args.project:
@@ -280,8 +282,8 @@ def main():
     # initializationCompleted, which QgisApp::fileOpenAfterLaunch() answers by
     # honouring qgis/projOpenAtLaunch (welcome page / most recent / specific / new).
     window.completeInitialization()
-    if args.smoke_test:
-        # The suites drive the map canvas, while qgis/projOpenAtLaunch == 0 makes
+    if args.check:
+        # The checks drive the map canvas, while qgis/projOpenAtLaunch == 0 makes
         # the welcome page the startup view, so bring the canvas forward.
         window.showMapCanvas()
     QgsProject.instance().setDirty(False)
@@ -290,8 +292,8 @@ def main():
         window.mMessageBar.pushWarning(
             '未找到配置档案',
             f"上次使用的配置档案 '{missingLastProfile}' 未找到，已改用默认配置档案。")
-    if args.smoke_test:
-        def smoke():
+    if args.check:
+        def runChecks():
             if args.statusbar_test:
                 from tests.src.python.test_qgisapp_statusbar import run
             elif args.layertree_test:
@@ -339,7 +341,7 @@ def main():
                     raise AssertionError(window.runtimeErrors)
                 out = ROOT / 'output'
                 out.mkdir(exist_ok=True)
-                reportName = 'remaining-actions-test.json' if args.remaining_actions_test else 'shape-test.json' if args.shape_test else 'toolbar-test.json' if args.toolbar_test else 'data-actions-test.json' if args.data_actions_test else 'annotation-test.json' if args.annotation_test else 'labeling-test.json' if args.labeling_test else 'smoke-test.json'
+                reportName = 'remaining-actions-test.json' if args.remaining_actions_test else 'shape-test.json' if args.shape_test else 'toolbar-test.json' if args.toolbar_test else 'data-actions-test.json' if args.data_actions_test else 'annotation-test.json' if args.annotation_test else 'labeling-test.json' if args.labeling_test else 'check.json'
                 if args.view_actions_test: reportName = 'view-actions-test.json'
                 if args.decoration_test: reportName = 'decoration-test.json'
                 if args.trim_extend_test: reportName = 'trim-extend-test.json'
@@ -354,38 +356,25 @@ def main():
                 if args.profile_test: reportName = 'profile-test.json'
                 if args.partial_actions_test: reportName = 'partial-actions-test.json'
                 (out / reportName).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
-                stage('report-written')
                 window.grab().save(str(out / 'qgis-python.png'))
-                stage('screenshot-written')
                 window.prepareToQuit()
                 app.exit(0)
-                stage('exit-requested')
             except Exception:
-                (ROOT / '.runtime/last-error.txt').write_text(traceback.format_exc(), encoding='utf-8')
                 traceback.print_exc(file=sys.__stderr__)
                 app.exit(1)
-        QTimer.singleShot(1200, smoke)
+        QTimer.singleShot(1200, runChecks)
     result = app.exec_()
-    stage('event-loop-exited:' + str(result))
     sys.excepthook = sys.__excepthook__
     sys.stdout, sys.stderr = sys.__stdout__, sys.__stderr__
     window.shutdown()
-    stage('shutdown')
     # Release Python-owned GUI objects before destroying provider registries.
     from qgis.PyQt import sip
     QgsProject.instance().clear()
     app.processEvents()
     sip.delete(window)
-    stage('window-deleted')
     app.exitQgis()
-    stage('qgis-exited')
     return result
 
 
 if __name__ == '__main__':
-    try:
-        exitCode = main()
-    except Exception:
-        (ROOT / '.runtime/last-error.txt').write_text(traceback.format_exc(), encoding='utf-8')
-        raise
-    sys.exit(exitCode)
+    sys.exit(main())
