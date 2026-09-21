@@ -464,7 +464,7 @@ class QgisApp(QMainWindow):
 
     def setTheme(self):
         # These assignments are made by QgisApp::setTheme in C++, not qgisapp.ui.
-        iconPath = ROOT / 'docs/upstream-icons.json'
+        iconPath = ROOT / 'manifests/upstream-icons.json'
         from images import THEME_ICONS
         icons = json.loads(iconPath.read_text(encoding='utf-8')) if iconPath.exists() else THEME_ICONS
         # Some 3.34 application assignments still name PNGs absent from its qrc.
@@ -773,7 +773,7 @@ class QgisApp(QMainWindow):
     def createActions(self):
         # Restrict the porting state to the main form's own inventory. Native
         # browser/editor widgets also have mAction* children with working slots.
-        inventoryPath = ROOT / 'docs/upstream-actions.json'
+        inventoryPath = ROOT / 'manifests/upstream-actions.json'
         if inventoryPath.exists():
             inventory = json.loads(inventoryPath.read_text(encoding='utf-8'))
         else:
@@ -3631,7 +3631,7 @@ class QgisApp(QMainWindow):
             if item['objectName'] in self.mImplementedActions: item.update(self.mImplementedActions[item['objectName']])
         source['summary'] = {status: sum(i['status'] == status for i in source['actions']) for status in
                              ['connected', 'not-ported', 'excluded-gps']}
-        catalog = ROOT / 'docs/upstream-toolbar-actions.json'
+        catalog = ROOT / 'manifests/upstream-toolbar-actions.json'
         dynamic = json.loads(catalog.read_text(encoding='utf-8')) if catalog.exists() else {'actions': [],
                                                                                             'extensionPoints': []}
         for item in dynamic['actions']:
@@ -3677,9 +3677,10 @@ class QgisApp(QMainWindow):
     def writeCoverage(self):
         from scripts.update_porting_status import writeChecklist
         status = self.coverage()
+        # docs/ 只放生成物，随时可以删除，所以写之前先确保目录存在。
         statusPath = ROOT / 'docs/implementation-status.json'
-        if statusPath.parent.exists():
-            statusPath.write_text(json.dumps(status, ensure_ascii=False, indent=2), encoding='utf-8')
+        statusPath.parent.mkdir(parents=True, exist_ok=True)
+        statusPath.write_text(json.dumps(status, ensure_ascii=False, indent=2), encoding='utf-8')
         return writeChecklist(status)
 
     def sponsors(self):

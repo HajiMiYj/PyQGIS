@@ -1149,4 +1149,7 @@ class QgsOptions(QgsOptionsDialogBase):
 
     def writeCoverage(self):
         unported = sorted(set(self.mFormControls) - self.mImplementedControls)
-        (ROOT / 'docs/options-status.json').write_text(json.dumps({'implementedControls': sorted(self.mImplementedControls), 'unportedControls': unported, 'pages': self.mOptionsStackedWidget.count(), 'note': 'Control wiring inventory, not complete behavioral parity.'}, ensure_ascii=False, indent=2), encoding='utf-8')
+        # docs/ 只放生成物，随时可以删除，所以写之前先确保目录存在。
+        statusPath = ROOT / 'docs/options-status.json'
+        statusPath.parent.mkdir(parents=True, exist_ok=True)
+        statusPath.write_text(json.dumps({'implementedControls': sorted(self.mImplementedControls), 'unportedControls': unported, 'pages': self.mOptionsStackedWidget.count(), 'note': 'Control wiring inventory, not complete behavioral parity.'}, ensure_ascii=False, indent=2), encoding='utf-8')

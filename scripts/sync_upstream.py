@@ -76,7 +76,7 @@ def main():
                 'uiSHA256': hashlib.sha256(uiPath.read_bytes()).hexdigest(),
                 'cppSHA256': hashlib.sha256(cppPath.read_bytes()).hexdigest(),
                 'actions': actions}
-    (docs / 'upstream-actions.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
+    (root / 'manifests' / 'upstream-actions.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
     shutil.copyfile(SOURCE / 'LICENSE', ROOT / 'LICENSE')
     print(f'Imported {len(actions)} upstream actions; removed {len(excluded)} GPS/GPX objects.')
 

@@ -51,7 +51,7 @@ CHECKS = (
 DEFAULT_CHECK = ('test_qgisapp', 'run')
 MISSING_MODULES = (
     '未找到检查模块 {name}。\n'
-    'tests/ 与 docs/ 不随仓库提供（见 README §7.6），请在带有 tests/ 的工作副本上运行检查。'
+    'tests/ 不随仓库提供（见 README §7.6），请在带有 tests/ 的工作副本上运行检查。'
 )
 
 

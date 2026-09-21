@@ -107,7 +107,7 @@ def main():
                             group='Bundled plugins', icon='', location='toolbar', note='原版随附插件提供的工具栏入口。'))
     payload = {'version': '3.34.10', 'actions': actions, 'extensionPoints': [
         {'toolbar': 'mWebToolBar', 'source': 'src/app/qgisapp.cpp', 'note': '原版为空的插件扩展工具栏；由插件调用 addWebToolBarIcon/addWebToolBarWidget 填入，没有固定内置 Action 清单。'}]}
-    (ROOT / 'docs/upstream-toolbar-actions.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+    (ROOT / 'manifests/upstream-toolbar-actions.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
     print(f'Imported {len(actions)} dynamic actions and one Web extension point.')
 
 

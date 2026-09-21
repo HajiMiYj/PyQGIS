@@ -129,7 +129,7 @@ class QgsMapToolEditMeshFrame(QgsMapToolAdvancedDigitizing):
             'mActionDelaunayTriangulation': self.delaunayTriangulation,
             'mActionForceByLines': lambda: self.activateWithState('ForceByLines'),
         }
-        catalog = Path(__file__).resolve().parents[3] / 'docs/upstream-toolbar-actions.json'
+        catalog = Path(__file__).resolve().parents[3] / 'manifests/upstream-toolbar-actions.json'
         for row in json.loads(catalog.read_text(encoding='utf-8'))['actions']:
             key = row['sourceKey'].removeprefix('mesh:')
             if key not in callbacks: continue

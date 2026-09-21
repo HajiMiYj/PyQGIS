@@ -70,7 +70,7 @@ class QgsMapToolsDigitizingTechniqueManager:
         self.mDigitizeModeToolButton.setDefaultAction(app.mActionDigitizeWithSegment)
         actions = app.mDigitizeToolBar.actions()
         app.mDigitizeToolBar.insertWidget(actions[3] if len(actions) > 3 else None, self.mDigitizeModeToolButton)
-        catalog = Path(__file__).resolve().parents[3] / 'docs/upstream-toolbar-actions.json'
+        catalog = Path(__file__).resolve().parents[3] / 'manifests/upstream-toolbar-actions.json'
         for item in json.loads(catalog.read_text(encoding='utf-8'))['actions']:
             toolId = item['sourceKey'].removeprefix('shape:')
             if toolId not in self.SHAPE_TOOLS: continue

@@ -129,7 +129,7 @@ class QgsGeoreferencerMainWindow(QMainWindow):
         self.mActionNames = list(slots)
         self.mToolActions = dict(mActionPan='pan', mActionZoomIn='zoomIn', mActionZoomOut='zoomOut',
                                 mActionAddPoint='add', mActionDeletePoint='delete', mActionMoveGCPPoint='move')
-        catalog = json.loads((ROOT / 'docs/upstream-toolbar-actions.json').read_text(encoding='utf-8'))
+        catalog = json.loads((ROOT / 'manifests/upstream-toolbar-actions.json').read_text(encoding='utf-8'))
         rows = {a['objectName']: a for a in catalog['actions'] if a['sourceKey'].startswith('georeferencer:')}
         for name, callback in slots.items():
             action = getattr(self, name)

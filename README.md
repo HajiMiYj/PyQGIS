@@ -6,7 +6,7 @@
 
 | 指标 | 现状 |
 | --- | --- |
-| 上游 action 清单 | 222 条（`docs/upstream-actions.json`） |
+| 上游 action 清单 | 222 条（`manifests/upstream-actions.json`） |
 | 已接入 | **216 条** |
 | 部分实现 | 1 条（`mActionDwgImport`，见 [§11](#11-已知差异与限制)） |
 | UI 占位（隐藏插入锚点） | 1 条（`mActionAddLayerSeparator`） |
@@ -166,7 +166,8 @@ qgis_python/
 ├─ resources/                   customization.xml 等
 ├─ scripts/                     移植审计、同步与构建脚本（§8）
 ├─ tests/src/python/            27 个检查模块（未入库，见 §7.6）
-├─ docs/                        生成的审计数据（未入库）
+├─ manifests/                   应用要读的清单数据（入库）：上游 action/工具栏/图标表
+├─ docs/                        生成的报告（未入库，可随时删除，缺了会自动重建）
 ├─ output/                      每次运行的产物：报告 JSON、临时目录、截图（被忽略）
 └─ .runtime/                    检查模式使用的隔离配置（被忽略）
 ```
@@ -181,7 +182,7 @@ qgis_python/
 
 界面上每个控件都来自上游 `.ui`，对象名以 `mAction` 开头（如 `mActionNewProject`）。定位永远是这三步：
 
-1. **拿到对象名**：`src/ui/qgisapp.ui` 或 `docs/upstream-actions.json` 里查中文/英文标题对应的 `objectName`；
+1. **拿到对象名**：`src/ui/qgisapp.ui` 或 `manifests/upstream-actions.json` 里查中文/英文标题对应的 `objectName`；
 2. **找绑定**：在 `src/app/qgisapp.py` 搜这个名字，看它绑到哪个 Python 方法；
 3. **读实现**：跳到那个方法，方法上方通常有注释指出对应的原生函数。
 
@@ -189,7 +190,7 @@ qgis_python/
 
 ```powershell
 # 1) 按标题找到对象名（例如“装饰 → 网格”）
-Select-String -Path docs/upstream-actions.json -Pattern '网格|Grid'
+Select-String -Path manifests/upstream-actions.json -Pattern '网格|Grid'
 
 # 2) 看这个对象名绑到了什么
 Select-String -Path src\app\qgisapp.py -Pattern 'mActionDecorationGrid'
@@ -539,13 +540,19 @@ foreach ($f in $flags) {
 2. 在 `check.py` 的 `CHECKS` 表加一行：`('--xxx-test', 'test_qgisapp_xxx', 'run')`。报告文件名由标志自动推导（`--xxx-test` → `output/xxx-test.json`），标志也会自动出现在 `check.py --help` 里。
 3. 单独跑一次：`python check.py --xxx-test`；再把它加进全量回归列表。
 
-### 7.6 注意：`tests/` 与 `docs/` 未入库
+### 7.6 输入数据、生成物与检查套件
 
-`.gitignore` 排除了 `tests/`、`docs/`、`output/`、`.runtime/`、`images/images_rc.py`、`src/ui/ui_*.py`。也就是说：
+| 目录 | 性质 | 能否删除 |
+| --- | --- | --- |
+| `manifests/` | **应用要读的输入数据**，随仓库提供：上游 action 清单（222 条）、动态工具栏 action 目录、图标表。`createActions()`、`setTheme()`、形状/网格/地理配准工具栏、`coverage()` 都从这里读 | 不建议：删了会丢掉上游基线——动作清单退化为"从当前界面自动发现"，形状/网格工具栏的按钮分组与地理配准动作表也会缺失 |
+| `docs/` | **生成物**，`.gitignore` 已排除：`implementation-status.json`（程序启动时写）、`options-status.json`（构造选项对话框时写）、`action-source-audit.json`（审计脚本写） | 可以随时整目录删除：写入处都会自动 `mkdir`，需要时会重建 |
+| `tests/` | **检查套件**，`.gitignore` 已排除，不随仓库提供 | 可以删除：`main.py` 不 import 它，应用照常运行；只是 `check.py` 会打印一行 "未找到检查模块 …" 并退出 |
 
-- 克隆仓库后没有检查套件与审计数据，需要自行保留/生成（按 §7.5 的约定编写即可被 `check.py` 调度）。此时运行检查会直接得到一行提示而不是堆栈：`check.py` 在构造窗口之前就用 `find_spec()` 确认检查模块存在，缺失即退出（`未找到检查模块 …，tests/ 与 docs/ 不随仓库提供`）。
-- `docs/*.json` 由 [§8](#8-状态文档与脚本) 的脚本生成，`功能移植清单.md` 由程序启动时生成，两者都不要手工编辑。缺 `docs/upstream-actions.json` 时应用仍可启动（`createActions()` 会回退到从当前 UI 自动发现动作，并在日志里给出提示），只是状态台账的基线由清单文件改为自动发现。
-- 检查与应用是分开的：`main.py` 不 import `check.py` 也不 import `tests/`，删除或保留 `tests/` 都不影响应用启动。
+补充说明：
+
+- 检查与应用是分开的：`main.py` 不 import `check.py`，也不 import `tests/`。
+- `功能移植清单.md` 由程序启动时重写，不要手工编辑；`docs/` 下的报告同样不要手工编辑。
+- 上游清单需要重建时（换一份 QGIS 源码树），设置 `QGIS_SOURCE_ROOT` 后运行 `scripts/sync_upstream.py`、`scripts/sync_toolbar_actions.py`、`scripts/sync_resources.py`，它们会写回 `manifests/`。
 
 ---
 
@@ -555,9 +562,9 @@ foreach ($f in $flags) {
 | --- | --- | --- | --- |
 | `功能移植清单.md` | 启动时 `QgisApp.writeCoverage()` | 面向人的 action 状态表（中文标签） | 每次启动自动更新，已入库 |
 | `docs/implementation-status.json` | 同上 | 机器可读状态（`status`/`handler`/`note`/`implementationState`） | 同上 |
-| `docs/upstream-actions.json` | `scripts/sync_upstream.py` | 从上游 `qgisapp.ui` + `qgisapp.cpp` 提取的 222 条 action 与槽映射，GPS/3D 标为排除 | 上游 UI/源码更新时 |
-| `docs/upstream-toolbar-actions.json` | `scripts/sync_toolbar_actions.py` | 运行时创建的动态 action 目录（工具栏/接口扩展点） | 上游更新时 |
-| `docs/upstream-icons.json` | `scripts/sync_resources.py` | 图标清单（同时重写 `images/__init__.py` 的主题图标映射） | 资源更新时 |
+| `manifests/upstream-actions.json` | `scripts/sync_upstream.py` | 从上游 `qgisapp.ui` + `qgisapp.cpp` 提取的 222 条 action 与槽映射，GPS/3D 标为排除 | 上游 UI/源码更新时 |
+| `manifests/upstream-toolbar-actions.json` | `scripts/sync_toolbar_actions.py` | 运行时创建的动态 action 目录（工具栏/接口扩展点） | 上游更新时 |
+| `manifests/upstream-icons.json` | `scripts/sync_resources.py` | 图标清单（同时重写 `images/__init__.py` 的主题图标映射） | 资源更新时 |
 | `docs/action-source-audit.json` | `scripts/audit_upstream_actions.py` | 逐条 action 的源码级审计证据 | 需要复核时 |
 | `docs/options-status.json` | 构造选项对话框时由 `src/app/options/qgsoptions.py` 写出 | 控件接线清单（`implementedControls`/`unportedControls`/页数） | 每次构造选项对话框时 |
 | `scripts/sync_options.py` | — | 从上游导入选项表单与字面量绑定，重写 `src/app/options/qgsoptionsbindings.py` | 上游选项表单变化时 |
@@ -651,7 +658,7 @@ offscreen 平台没有字体目录，属正常噪声；不要基于离屏字体�
 | 欢迎页自绘项 | 高度接近原生，非逐像素 | 自绘代理由 C++ 复刻；`QgsScopedQPainterState` 未绑定，用 `save()/restore()` 等价替换 |
 | 端口自创文案 | 保持中文 | 改成 `tr()` 会在中文界面显示英文；若要英文界面，应把这些文案的英文源串补进翻译目录 |
 | `QgsGui::nativePlatformInterface()` | 用 `QDesktopServices` 等价实现 | 该单例未绑定；"打开所在目录"等行为等价，调用路径不同 |
-| `tests/`、`docs/` 不入库 | 见 [§7.6](#76-注意tests-与-docs-未入库) | 希望他人开箱即跑检查时，可调整 `.gitignore` 并把检查与审计数据入库 |
+| `tests/` 不入库 | 见 [§7.6](#76-输入数据生成物与检查套件) | 希望他人开箱即跑检查时，可调整 `.gitignore` 并把检查套件入库 |
 | Processing 提供者可执行性 | 取决于环境 | 例如 GRASS/OTB 需要各自安装与配置（见 FAQ）；端口负责注册与选项页，执行能力由 OSGeo4W 组件决定 |
 
 ---
