@@ -1,5 +1,4 @@
 """QGIS georeferencer application window, backed by native analysis/GDAL APIs."""
-import json
 import math
 from pathlib import Path
 from qgis.PyQt import uic, sip
@@ -37,6 +36,36 @@ class QgsGeorefDockWidget(QgsDockWidget):
     def __init__(self, title, parent=None, flags=Qt.WindowFlags()):
         super().__init__(title, parent, flags)
         self.setObjectName('GeorefDockWidget')
+
+
+# 上游地理配准窗口动作的图标赋值（src/ui/qgsgeorefpluginguibase.ui + 3.34 源码）。
+GEOREF_ICONS = {
+    'mActionOpenRaster': '/mActionAddRasterLayer.svg',
+    'mActionZoomIn': '/mActionZoomIn.svg',
+    'mActionZoomOut': '/mActionZoomOut.svg',
+    'mActionZoomToLayer': '/mActionZoomToLayer.svg',
+    'mActionPan': '/mActionPan.svg',
+    'mActionTransformSettings': '/propertyicons/settings.svg',
+    'mActionAddPoint': '/georeferencer/mActionAddGCPPoint.svg',
+    'mActionDeletePoint': '/georeferencer/mActionDeleteGCPPoint.svg',
+    'mActionQuit': '',
+    'mActionStartGeoref': '/mActionStart.svg',
+    'mActionGDALScript': '/georeferencer/mActionGDALScript.svg',
+    'mActionLinkGeorefToQgis': '/georeferencer/mActionLinkGeorefToQgis.svg',
+    'mActionLinkQGisToGeoref': '/georeferencer/mActionLinkQGisToGeoref.svg',
+    'mActionSaveGCPpoints': '/georeferencer/mActionSaveGCPpointsAs.svg',
+    'mActionLoadGCPoints': '/georeferencer/mActionLoadGCPpoints.svg',
+    'mActionLoadGCPpoints': '/georeferencer/mActionLoadGCPpoints.svg',
+    'mActionGeorefConfig': '/georeferencer/mGeorefRun.svg',
+    'mActionSourceProperties': '',
+    'mActionMoveGCPPoint': '/georeferencer/mActionMoveGCPPoint.svg',
+    'mActionZoomNext': '/mActionZoomNext.svg',
+    'mActionZoomLast': '/mActionZoomLast.svg',
+    'mActionLocalHistogramStretch': '/mActionLocalHistogramStretch.svg',
+    'mActionFullHistogramStretch': '/mActionFullHistogramStretch.svg',
+    'mActionReset': '',
+    'mActionOpenVector': '',
+}
 
 
 class QgsGeoreferencerMainWindow(QMainWindow):
@@ -129,8 +158,6 @@ class QgsGeoreferencerMainWindow(QMainWindow):
         self.mActionNames = list(slots)
         self.mToolActions = dict(mActionPan='pan', mActionZoomIn='zoomIn', mActionZoomOut='zoomOut',
                                 mActionAddPoint='add', mActionDeletePoint='delete', mActionMoveGCPPoint='move')
-        catalog = json.loads((ROOT / 'manifests/upstream-toolbar-actions.json').read_text(encoding='utf-8'))
-        rows = {a['objectName']: a for a in catalog['actions'] if a['sourceKey'].startswith('georeferencer:')}
         for name, callback in slots.items():
             action = getattr(self, name)
             action.triggered.connect(lambda checked=False, call=callback: self.invoke(call))
@@ -138,17 +165,8 @@ class QgsGeoreferencerMainWindow(QMainWindow):
                 action.setCheckable(True)
                 self.mActionGroup.addAction(action)
                 self.mTools[self.mToolActions[name]].setAction(action)
-            row = rows.get(name, {})
-            if row.get('icon'): action.setIcon(QgsApplication.getThemeIcon(row['icon']))
-            toolbar = next((bar for bar in (self.toolBarFile, self.toolBarEdit, self.toolBarView, self.toolBarHistogramStretch)
-                            if action in bar.actions()), None)
-            note = '原版地理配准窗口 Action；连接源图层、控制点、原生变换器及画布状态。'
-            if name == 'mActionStartGeoref': note = '栅格线性/Helmert/一至三阶多项式/TPS/投影变换（自实现单应+可分离核重采样）、线性世界文件和原生矢量变换；取消、输出保护、PDF 地图/报告与加载。'
-            if name == 'mActionTransformSettings': note = '原版变换设置 UI；全部七种方法、CRS、五种重采样、压缩、分辨率、透明零值、世界文件、PDF 地图/报告目标、保存控制点及加载。'
-            if name == 'mActionGDALScript': note = '预览、复制及保存独立 GDAL Python 脚本；栅格与 OGR 矢量、多项式/TPS、图层与子集过滤。'
-            if name == 'mActionGeorefConfig': note = '原版配置 UI；控制点 ID/坐标提示与残差单位保存。停靠及 PDF 页面设置未移植。'
-            self.mApp.mDynamicActions['georeferencer:' + name] = dict(action=action, handler=getattr(callback, '__name__', name),
-                toolbar=row.get('toolbar', ''), toolbarWidget=toolbar, inInterface=True, note=note)
+            icon = GEOREF_ICONS.get(name)
+            if icon: action.setIcon(QgsApplication.getThemeIcon(icon))
 
     def invoke(self, callback):
         if self.mBusy: return

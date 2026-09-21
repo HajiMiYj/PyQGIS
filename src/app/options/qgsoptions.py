@@ -128,7 +128,6 @@ class QgsOptions(QgsOptionsDialogBase):
         self.buttonBox.helpRequested.connect(lambda: QDesktopServices.openUrl(QUrl('https://docs.qgis.org/3.34/en/docs/user_manual/introduction/qgis_configuration.html')))
         self.restoreOptionsBaseUi('选项')
         if currentPage: self.setCurrentPage(currentPage)
-        self.writeCoverage()
 
     def createTree(self):
         # Depth-first ordering is the order of pages in qgsoptionsbase.ui.
@@ -1147,9 +1146,3 @@ class QgsOptions(QgsOptionsDialogBase):
         app.mBrowserModel.refresh()
         app.mMapCanvas.refresh()
 
-    def writeCoverage(self):
-        unported = sorted(set(self.mFormControls) - self.mImplementedControls)
-        # 生成物统一放在 output/（不入库），写之前确保目录存在。
-        statusPath = ROOT / 'output/options-status.json'
-        statusPath.parent.mkdir(parents=True, exist_ok=True)
-        statusPath.write_text(json.dumps({'implementedControls': sorted(self.mImplementedControls), 'unportedControls': unported, 'pages': self.mOptionsStackedWidget.count(), 'note': 'Control wiring inventory, not complete behavioral parity.'}, ensure_ascii=False, indent=2), encoding='utf-8')

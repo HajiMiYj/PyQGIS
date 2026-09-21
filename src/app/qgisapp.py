@@ -112,7 +112,6 @@ class QgisApp(QMainWindow):
         self.mPluginManager = None
         self.mShutdown = False
         self.mImplementedActions = {}
-        self.mDynamicActions = {}
         self.mAnnotationItemTools = {}
         self.mAnnotationItemActions = {}
         self.mRequirements = {}
@@ -247,7 +246,6 @@ class QgisApp(QMainWindow):
         self.setIconSizes(iconSize)
         self.showSplashMessage('Populate saved styles')
         QgsStyle.defaultStyle()
-        self.writeCoverage()
         self.showSplashMessage('QGIS Ready!')
 
     @staticmethod
@@ -328,9 +326,6 @@ class QgisApp(QMainWindow):
         self.mWebMenu = QMenu('Web', self)
         self.menuBar().insertMenu(self.mHelpMenu.menuAction(), self.mDatabaseMenu)
         self.menuBar().insertMenu(self.mHelpMenu.menuAction(), self.mWebMenu)
-        action = self.mHelpMenu.addAction('功能移植清单…')
-        action.setObjectName('mActionPortingStatus')
-        action.triggered.connect(self.showPortingStatus)
 
     def createStatusBar(self):
         from .qgsstatusbarcoordinateswidget import QgsStatusBarCoordinatesWidget
@@ -464,9 +459,8 @@ class QgisApp(QMainWindow):
 
     def setTheme(self):
         # These assignments are made by QgisApp::setTheme in C++, not qgisapp.ui.
-        iconPath = ROOT / 'manifests/upstream-icons.json'
         from images import THEME_ICONS
-        icons = json.loads(iconPath.read_text(encoding='utf-8')) if iconPath.exists() else THEME_ICONS
+        icons = THEME_ICONS
         # Some 3.34 application assignments still name PNGs absent from its qrc.
         # Keep the source inventory literal and resolve to the shipped SVG here.
         replacements = {'mActionSetLayerCRS': '/mActionSetProjection.svg',
@@ -560,8 +554,6 @@ class QgisApp(QMainWindow):
                      'mFilterLegendByMapContentAction', 'mFilterLegendToggleShowPrivateLayersAction'):
             action = getattr(self, name)
             action.setObjectName(name)
-            self.mDynamicActions['qgisapp:' + name] = dict(action=action, handler=name, note='原版图层面板动态入口。',
-                                                           toolbarWidget=self.mLayerTreeToolBar, inInterface=True)
         self.mLayerTreeToolBar.addAction(self.mActionRemoveLayer)
         self.mMapCanvas.extentsChanged.connect(self.updateFilterLegend)
         layout.addWidget(self.mLayerTreeToolBar)
@@ -771,32 +763,6 @@ class QgisApp(QMainWindow):
         if requirement: self.mRequirements[name] = requirement
 
     def createActions(self):
-        # Restrict the porting state to the main form's own inventory. Native
-        # browser/editor widgets also have mAction* children with working slots.
-        inventoryPath = ROOT / 'manifests/upstream-actions.json'
-        if inventoryPath.exists():
-            inventory = json.loads(inventoryPath.read_text(encoding='utf-8'))
-        else:
-            actionNames = getattr(self, 'mUiActionNames', [])
-            if not actionNames:
-                actionNames = [action.objectName() for action in self.findChildren(QAction) if action.objectName()]
-            inventory = {'actions': []}
-            for name in actionNames:
-                action = getattr(self, name, None)
-                inventory['actions'].append({
-                    'objectName': name,
-                    'text': action.text() if isinstance(action, QAction) else name,
-                    'excluded': False,
-                })
-            QgsApplication.messageLog().logMessage(
-                '未找到可选动作清单；已从当前 UI 自动发现 QAction',
-                'Python', Qgis.Warning)
-        self.mActionInventory = inventory
-        for item in inventory['actions']:
-            action = getattr(self, item['objectName'], None)
-            if isinstance(action, QAction):
-                action.setEnabled(False)
-                action.setToolTip(action.text() + ' — 此应用层功能尚未移植；见帮助 → 功能移植清单')
         slots = {
             'NewProject': self.fileNew, 'NewBlankProject': self.fileNewBlank,
             'OpenProject': self.fileOpen, 'CloseProject': self.fileClose, 'RevertProject': self.fileRevert,
@@ -1090,15 +1056,7 @@ class QgisApp(QMainWindow):
         self.newProfileAction.setObjectName('newProfileAction')
         self.newProfileAction.triggered.connect(self.newProfile)
         self.mConfigMenu.addAction(self.newProfileAction)
-        self.mDynamicActions['qgisapp:newProfileAction'] = dict(action=self.newProfileAction,
-                                                                handler='newProfile',
-                                                                note='原版 QgsNewNameDialog 输入名称并创建用户配置，随后以该配置启动新的应用实例。',
-                                                                inInterface=True)
         self.mConfigMenu.addAction(self.openProfileFolderAction)
-        self.mDynamicActions['qgisapp:openProfileFolderAction'] = dict(action=self.openProfileFolderAction,
-                                                                       handler='openProfileFolder',
-                                                                       note='打开当前独立应用实际使用的 QGIS 配置目录。',
-                                                                       inInterface=True)
         for name in self.mImplementedActions:
             action = getattr(self, name)
             action.setToolTip(self.mImplementedActions[name].get('note') or action.text())
@@ -1268,9 +1226,6 @@ class QgisApp(QMainWindow):
         self.mMapToolActionGroup.addAction(action)
         self.mAnnotationsToolBar.insertAction(self.mAnnotationsItemInsertBefore, action)
         self.mAnnotationItemActions[metadataId] = action
-        self.mDynamicActions['annotation:' + metadata.type()] = {
-            'action': action, 'handler': 'annotationItemTypeAdded', 'toolbar': 'mAnnotationsToolBar',
-            'note': '原生注册表/捕获工具创建注记项，加入目标注记图层；原生内容/符号属性页、渲染与工程保存。节点修改单列于 Modify Annotations。'}
 
         def activated(checked):
             if not checked: return
@@ -1323,28 +1278,15 @@ class QgisApp(QMainWindow):
         from db_manager import classFactory as dbFactory
         self.mDbManagerPlugin = dbFactory(self.mQgisInterface)
         self.mDbManagerPlugin.initGui()
-        self.mDynamicActions['db_manager:action'] = dict(
-            action=self.mDbManagerPlugin.action, handler='DBManagerPlugin.run',
-            toolbar='mDatabaseToolBar', inInterface=True,
-            note='原生 OSGeo4W DB Manager 插件；数据库树、SQL 窗口、表/字段/约束管理与导入导出，经 addPluginToDatabaseMenu 挂入数据库菜单。')
         from MetaSearch import classFactory as msFactory
         self.mMetaSearchPlugin = msFactory(self.mQgisInterface)
         self.mMetaSearchPlugin.initGui()
-        self.mDynamicActions['MetaSearch:action_run'] = dict(
-            action=self.mMetaSearchPlugin.action_run, handler='MetaSearchPlugin.run',
-            toolbar='mWebToolBar', inInterface=True,
-            note='原生 OSGeo4W MetaSearch 插件；CSW 元数据目录搜索，经 addPluginToWebMenu 挂入 Web 菜单。')
         # Native core plugin plugin_offlineediting. Its whole logic lives in the
         # PyQGIS-visible QgsOfflineEditing, so it is reproduced in Python (the C++
         # DLL would only add an ABI dependency for the same two actions).
         from .offline_editing.qgsofflineeditingplugin import QgsOfflineEditingPlugin
         self.mOfflineEditingPlugin = QgsOfflineEditingPlugin(self)
-        for key, action in self.mOfflineEditingPlugin.initGui().items():
-            self.mDynamicActions[key] = dict(
-                action=action, handler='QgsOfflineEditingPlugin.convertProject', toolbar='mDatabaseToolBar',
-                inInterface=True,
-                note='原生离线编辑核心插件；QgsOfflineEditing 转换为离线工程（GeoPackage/SpatiaLite、图层选择、'
-                     '仅所选、覆盖确认）与同步，含原生进度对话框与数据库工具栏/菜单入口。')
+        self.mOfflineEditingPlugin.initGui()
         # Native core plugin plugin_topology: its rule engine (topolTest.cpp,
         # 41 kB) has no PyQGIS equivalent, so load the shipped DLL and drive its
         # QgisPlugin through the ported QgisInterface.
@@ -1363,13 +1305,6 @@ class QgisApp(QMainWindow):
                 f'加载原生拓扑检查器插件失败：{error}', 'Python', Qgis.Warning)
             return
         self.mNativePlugins.append(plugin)
-        action = next((item for item in self.mVectorToolBar.actions()
-                       if item.objectName() == 'mQActionPointer'), None)
-        if action is not None:
-            self.mDynamicActions['topology:mQActionPointer'] = dict(
-                action=action, handler='Topol.showOrHide', toolbar='mVectorToolBar', inInterface=True,
-                note='原生 plugin_topology C++ 插件（经 classFactory 加载）：拓扑规则对话框、检查坞、'
-                     '错误列表与定位；规则引擎使用插件自带实现。')
 
     def excludeGpsFromToolbox(self):
         from qgis.PyQt.QtCore import QModelIndex
@@ -2300,10 +2235,6 @@ class QgisApp(QMainWindow):
         if self.mRecentProjects:
             self.mRecentProjectsMenu.addSeparator()
             self.mRecentProjectsMenu.addAction(self.clearRecentProjectsAction)
-        self.mDynamicActions['qgisapp:clearRecentProjectsAction'] = dict(action=self.clearRecentProjectsAction,
-                                                                         handler='clearRecentProjects',
-                                                                         note='清空最近工程记录，保留磁盘工程文件。',
-                                                                         inInterface=True)
 
     def openProjectAction(self, path):
         self.openProject(path)
@@ -2335,11 +2266,6 @@ class QgisApp(QMainWindow):
             self.updateProjectFromTemplatesAction = QAction('从模板新建', self)
             self.updateProjectFromTemplatesAction.setObjectName('updateProjectFromTemplates')
             self.updateProjectFromTemplatesAction.triggered.connect(self.updateProjectFromTemplates)
-        self.mDynamicActions['qgisapp:updateProjectFromTemplates'] = dict(
-            action=self.updateProjectFromTemplatesAction, handler='updateProjectFromTemplates',
-            note='原版扫描 qgis/projectTemplateDir 下的 .qgs/.qgz 刷新"从模板新建"菜单；启用默认工程时追加 < Blank >；'
-                 '选中模板走 fileNewFromTemplate（清空文件名以免覆盖模板），< Blank > 走新建空白工程。',
-            inInterface=True)
         self.updateProjectFromTemplates()
 
     def addUserInputWidget(self, widget):
@@ -3623,66 +3549,6 @@ class QgisApp(QMainWindow):
         QMessageBox.about(self, '关于',
                           f'QGIS Python 3.34.10\n运行库：{Qgis.QGIS_VERSION}\n基于 QGIS GPL 源码的应用层移植。\nGPS 已排除。功能覆盖情况见帮助菜单。')
 
-    def coverage(self):
-        source = json.loads(json.dumps(getattr(self, 'mActionInventory', {'actions': []})))
-        for item in source['actions']:
-            item['status'] = 'excluded-gps' if item.get('excluded', False) else (
-                'connected' if item['objectName'] in self.mImplementedActions else 'not-ported')
-            if item['objectName'] in self.mImplementedActions: item.update(self.mImplementedActions[item['objectName']])
-        source['summary'] = {status: sum(i['status'] == status for i in source['actions']) for status in
-                             ['connected', 'not-ported', 'excluded-gps']}
-        catalog = ROOT / 'manifests/upstream-toolbar-actions.json'
-        dynamic = json.loads(catalog.read_text(encoding='utf-8')) if catalog.exists() else {'actions': [],
-                                                                                            'extensionPoints': []}
-        for item in dynamic['actions']:
-            implementation = self.mDynamicActions.get(item['sourceKey'])
-            item['status'] = 'connected' if implementation else 'not-ported'
-            item['inToolbar'] = False
-            item['inInterface'] = False
-            if implementation:
-                action = implementation['action']
-                item.update(objectName=action.objectName(), handler=implementation['handler'],
-                            note=implementation['note'])
-                toolbar = implementation.get('toolbarWidget', getattr(self, item['toolbar'], None))
-                item['inToolbar'] = toolbar is not None and action in toolbar.actions()
-                if not item['inToolbar'] and toolbar is not None:
-                    item['inToolbar'] = any(
-                        button.menu() and action in button.menu().actions()
-                        for toolbarAction in toolbar.actions()
-                        for button in [toolbar.widgetForAction(toolbarAction)]
-                        if isinstance(button, QToolButton))
-                item['inInterface'] = item['inToolbar'] or implementation.get('inInterface', False)
-        source['dynamicActions'] = dynamic['actions']
-        source['dynamicSummary'] = {state: sum(item['status'] == state for item in dynamic['actions']) for state in
-                                    ('connected', 'not-ported')}
-        source['extensionPoints'] = dynamic['extensionPoints']
-        source['toolbarAudit'] = []
-        for name in ('mAnnotationsToolBar', 'mShapeDigitizeToolBar', 'mMeshToolBar', 'mWebToolBar'):
-            toolbar = getattr(self, name)
-            source['toolbarAudit'].append({'objectName': name, 'title': toolbar.windowTitle(),
-                                           'actions': [action.objectName() or action.text() for action in
-                                                       toolbar.actions() if not action.isSeparator()],
-                                           'dynamicMissing': sum(
-                                               item['toolbar'] == name and item['status'] == 'not-ported' for item in
-                                               dynamic['actions'])})
-        source[
-            'note'] = 'Main UI and dynamic toolbars have separate counts. Neither is a complete census of every QGIS action; connected is not full behavioral parity.'
-        source['processingAlgorithmCount'] = len(QgsApplication.processingRegistry().algorithms())
-        source['gpsAlgorithmsHiddenFromDesktop'] = self.mGpsAlgorithmsRemoved
-        from scripts.update_porting_status import implementationState
-        for item in source['actions'] + source['dynamicActions']:
-            item['implementationState'] = implementationState(item)
-        return source
-
-    def writeCoverage(self):
-        from scripts.update_porting_status import writeChecklist
-        status = self.coverage()
-        # 生成物统一放在 output/（不入库），写之前确保目录存在。
-        statusPath = ROOT / 'output/implementation-status.json'
-        statusPath.parent.mkdir(parents=True, exist_ok=True)
-        statusPath.write_text(json.dumps(status, ensure_ascii=False, indent=2), encoding='utf-8')
-        return writeChecklist(status)
-
     def sponsors(self):
         url = self.mSettings.value('qgis/qgisSponsorsUrl', 'https://qgis.org/en/site/about/sustaining_members.html')
         return QDesktopServices.openUrl(QUrl(url))
@@ -3782,13 +3648,6 @@ class QgisApp(QMainWindow):
         self.mElevationProfileWidget.show()
         self.mElevationProfileWidget.raise_()
         return self.mElevationProfileWidget
-
-    def showPortingStatus(self):
-        path = self.writeCoverage()
-        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
-            # Windows may have no default application associated with .md.
-            from qgis.PyQt.QtCore import QProcess
-            QProcess.startDetached('notepad.exe', [str(path)])
 
     def showGeoreferencer(self):
         self.mGeoreferencer.show()

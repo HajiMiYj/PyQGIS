@@ -6,18 +6,17 @@
 
 | 指标 | 现状 |
 | --- | --- |
-| 上游 action 清单 | 222 条（`manifests/upstream-actions.json`） |
+| 上游 action 覆盖 | 222 条中已接入 216 条 |
 | 已接入 | **216 条** |
-| 部分实现 | 1 条（`mActionDwgImport`，见 [§11](#11-已知差异与限制)） |
+| 部分实现 | 1 条（`mActionDwgImport`，见 [§9](#9-已知差异与限制)） |
 | UI 占位（隐藏插入锚点） | 1 条（`mActionAddLayerSeparator`） |
 | 未实现 | **0 条** |
 | 范围外（GPS + 3D） | 4 条，按项目范围决定排除 |
 | 动态 action（工具栏/插件/接口扩展点） | 88 条已接入，0 条未实现 |
 | 选项页面 | 26 页 |
 | 代码规模 | `src/app` 186 个模块、`src/gui` 12 个、`src/ui` 50 个 `.ui` |
-| 内置检查 | 20 项，全部通过（见 [§7](#7-内置检查)） |
 
-> 上表数字由程序自己统计：每次启动都会重写 `功能移植清单.md` 与 `output/implementation-status.json`（见 [§8](#8-状态文档与脚本)）。
+> `main.py` 是应用入口；`src/app` 与 `src/gui` 里的模块与上游 C++ 文件一一对应。
 
 ---
 
@@ -29,14 +28,12 @@
 - [4. 新手教学：从界面走到代码](#4-新手教学从界面走到代码)
 - [5. 移植方法论（硬规则）](#5-移植方法论硬规则)
 - [6. 关键子系统指南](#6-关键子系统指南)
-- [7. 内置检查](#7-内置检查)
-- [8. 状态文档与脚本](#8-状态文档与脚本)
-- [9. 代码规范与红线](#9-代码规范与红线)
-- [10. 故障排查 FAQ](#10-故障排查-faq)
-- [11. 已知差异与限制](#11-已知差异与限制)
-- [12. 贡献流程](#12-贡献流程)
-- [13. 参考](#13-参考)
-- [附录 A：功能与检查矩阵](#附录-a功能与检查矩阵)
+- [7. 代码规范与红线](#7-代码规范与红线)
+- [8. 故障排查 FAQ](#8-故障排查-faq)
+- [9. 已知差异与限制](#9-已知差异与限制)
+- [10. 贡献流程](#10-贡献流程)
+- [11. 参考](#11-参考)
+- [附录 A：功能与入口速查](#附录-a功能与入口速查)
 
 ---
 
@@ -54,9 +51,9 @@
 | 界面资源 | 上游 `.ui` 表单、图标、启动图、自定义目录 XML | `src/ui`、`images`、`resources` |
 | 插件 | Processing、DB Manager、MetaSearch、GRASS/OTB provider 等原版插件 | OSGeo4W `apps/qgis-ltr/python/plugins` |
 
-**覆盖范围**：主窗口 `.ui` 声明的全部 action、以及上游 C++ 运行时动态创建的工具栏/菜单/接口动作，状态逐条登记在 `功能移植清单.md`。
+**覆盖范围**：主窗口 `.ui` 声明的全部 action，以及上游 C++ 运行时动态创建的工具栏/菜单/接口动作。
 **范围外**：3D 地图视图与 GPS/GPX 入口共 4 条 action，该决定记录在 `scripts/sync_upstream.py` 的 `OUT_OF_SCOPE_ACTIONS`，因此重新生成清单时它们始终是"排除"而不会变成待办。
-**唯一的部分实现**：DWG 导入（GDAL CAD 后端只支持 R2000 及更早版本），细节见 [§11](#11-已知差异与限制)。
+**唯一的部分实现**：DWG 导入（GDAL CAD 后端只支持 R2000 及更早版本），细节见 [§9](#9-已知差异与限制)。
 
 ---
 
@@ -98,13 +95,6 @@ python main.py -S "D:\profiles"        # 指定 profiles 根目录
 python main.py --help                  # 全部参数
 ```
 
-检查是开发工具，放在独立的 `check.py` 里（它复用 `main.py` 的启动流程构造真实窗口），用法见 [§7](#7-内置检查)：
-
-```powershell
-python check.py --check                # 默认套件
-python check.py --startup-test         # 单项
-```
-
 ### 2.3 环境变量
 
 | 变量 | 作用 |
@@ -115,7 +105,7 @@ python check.py --startup-test         # 单项
 | `QGIS_PYTHON_NATIVE_PROFILE` | 置 `1` 时使用原生 `QGIS`/`QGIS3` 组织与应用名，与原生 QGIS 共用同一份配置树；默认使用本项目自己的 `QGIS-Python/QGIS-Python-3.34` 树，两边互不覆盖布局与选项 |
 | `QGIS_TRANSLATION_CODE` | 强制指定界面翻译代码（等价原生的语言参数） |
 | `QGIS_SOURCE_ROOT` | 供 `scripts/*` 使用：本地 3.34.10 源码树路径（脚本默认 `C:\QGIS_COMPILE\QGIS-final-3_34_10`） |
-| `QT_QPA_PLATFORM` | 置 `offscreen` 做无头运行；跑内置检查时必须设置 |
+| `QT_QPA_PLATFORM` | 置 `offscreen` 做无头运行（无显示环境时启动） |
 
 ### 2.4 首次运行前生成资源
 
@@ -142,10 +132,8 @@ python check.py --startup-test         # 单项
 
 ```
 qgis_python/
-├─ main.py                      应用入口，对应原生 src/app/main.cpp（启动时序见 §6.1）
-├─ check.py                     检查运行器（开发工具，见 §7）
+├─ main.py                      唯一入口，对应原生 src/app/main.cpp（启动时序见 §6.1）
 ├─ LICENSE                      GPL-3.0（与上游 QGIS 一致）
-├─ 功能移植清单.md              程序启动时自动重写的 action 状态台账（已入库）
 ├─ src/
 │  ├─ app/                      对应原生 src/app/*.cpp：应用层，主要开发区（186 个模块）
 │  │  ├─ qgisapp.py             主窗口控制器，对应 qgisapp.cpp/.h（动作绑定见 §4）
@@ -164,11 +152,8 @@ qgis_python/
 ├─ python/                      随包发布的 Python 控制台副本（console/、plugins/）
 ├─ images/                      上游图标与启动图资源
 ├─ resources/                   customization.xml 等
-├─ scripts/                     移植审计、同步与构建脚本（§8）
-├─ tests/src/python/            27 个检查模块（未入库，见 §7.6）
-├─ manifests/                   应用要读的清单数据（入库）：上游 action/工具栏/图标表
+├─ scripts/                     构建脚本：build-resources.cmd、build-ui.cmd
 ├─ output/                      运行与检查的产物：状态报告、截图、临时目录（被忽略）
-├─ output/                      每次运行的产物：报告 JSON、临时目录、截图（被忽略）
 └─ .runtime/                    检查模式使用的隔离配置（被忽略）
 ```
 
@@ -182,7 +167,7 @@ qgis_python/
 
 界面上每个控件都来自上游 `.ui`，对象名以 `mAction` 开头（如 `mActionNewProject`）。定位永远是这三步：
 
-1. **拿到对象名**：`src/ui/qgisapp.ui` 或 `manifests/upstream-actions.json` 里查中文/英文标题对应的 `objectName`；
+1. **拿到对象名**：在 `src/ui/qgisapp.ui` 里搜中文/英文标题，读出该控件的 `objectName`（形如 `mActionXxx`）；
 2. **找绑定**：在 `src/app/qgisapp.py` 搜这个名字，看它绑到哪个 Python 方法；
 3. **读实现**：跳到那个方法，方法上方通常有注释指出对应的原生函数。
 
@@ -190,7 +175,7 @@ qgis_python/
 
 ```powershell
 # 1) 按标题找到对象名（例如“装饰 → 网格”）
-Select-String -Path manifests/upstream-actions.json -Pattern '网格|Grid'
+Select-String -Path src\ui\qgisapp.ui -Pattern '网格|Grid'
 
 # 2) 看这个对象名绑到了什么
 Select-String -Path src\app\qgisapp.py -Pattern 'mActionDecorationGrid'
@@ -264,7 +249,7 @@ def comboSetting(self, name, key, options, default):
 desiredStyle = settings.value('qgis/style', '', type=str)
 ```
 
-**改一个选项的完整动作**：确认控件已 `self.enable(...)`、在绑定表里登记、`saveOptions()` 能写回、启动路径能读到；然后跑 `python check.py --check` 与 `python check.py --startup-test`。
+**改一个选项的完整动作**：确认控件已 `self.enable(...)`、在绑定表里登记、`saveOptions()` 能写回、启动路径能读到；然后在真桌面平台启动一次并核对界面（见 [§10](#10-贡献流程) 的验证步骤）。
 
 ### 4.4 实例三：新增一个 action（完整闭环）
 
@@ -290,8 +275,8 @@ self.mDynamicActions['qgisapp:actionDocumentation'] = dict(
 
 **验证顺序**：
 1. 启动程序，点击该菜单项，确认行为；
-2. `python check.py --check`（默认套件）与相关子系统检查；
-3. 打开 `功能移植清单.md`，确认该 action 的状态从"未实现"变为"已接入"（若是上游清单内的 action）；
+2. 在真桌面平台（不设 `QT_QPA_PLATFORM`）启动一次，确认该功能可用；
+3. 确认相关文档（README 的范围表、`src/ui` 里的对应控件）与实现一致；
 4. 提交时写清"做了什么 + 对应原生位置"。
 
 ### 4.5 实例四：一条界面文字是怎么被翻译的
@@ -332,7 +317,6 @@ self.mDynamicActions['qgisapp:actionDocumentation'] = dict(
 | 某个原生类在端口里的对应文件 | `Get-ChildItem src -Recurse -Filter '*snapping*'` |
 | 某条界面文字 | `Select-String -Path src -Recurse -Pattern 'Panels'` |
 | 某个动态动作的登记 | `Select-String -Path src\app\qgisapp.py -Pattern 'mDynamicActions'` |
-| 动作的当前状态 | 打开 `功能移植清单.md`，或在程序里用 帮助 → 功能移植清单 |
 
 ---
 
@@ -340,7 +324,7 @@ self.mDynamicActions['qgisapp:actionDocumentation'] = dict(
 
 1. **优先用 PyQGIS 绑定**。`qgis.core` / `qgis.gui` 里有的类直接实例化。
 2. **没有绑定就照 C++ 复刻**。类名、方法名、信号名、参数顺序与语义对齐上游；docstring 写明"对应 xxx.cpp 的 xxx()"。
-3. **不写伪替身**。空壳类会掩盖真实缺口；确实受后端限制（如 DWG 版本）时在状态台账标 `partial` 并在 [§11](#11-已知差异与限制) 写明原因。
+3. **不写伪替身**。空壳类会掩盖真实缺口；确实受后端限制（如 DWG 版本）时在 [§9](#9-已知差异与限制) 写明原因。
 4. **注释引用原生位置**。方便后来者对照源码验证：
 
    ```python
@@ -396,10 +380,9 @@ self.mDynamicActions['qgisapp:actionDocumentation'] = dict(
 
 按原生构造函数顺序展开：`createCanvas` / `createMenus` / `createStatusBar` / `createLayerTreeView` / `createDockWidgets` / `createMapTools` / `createActions` / `createToolBars`…
 
-- `bind(name, callback, requirement, note)`：动作绑定 + 状态登记（[§4.2](#42-实例一工程新建执行了什么)）。
+- `bind(name, callback, requirement, note)`：把动作连到处理器、按 `requirement` 登记可用条件（[§4.2](#42-实例一工程新建执行了什么)）。
 - `mDynamicActions`：运行时创建的动作（工具栏/插件扩展点/接口方法），登记 `handler`/`note`/`inInterface`。
 - `mRequirements` + `updateActionState()`：按当前图层类型/编辑状态启停动作。
-- `coverage()` / `writeCoverage()`：统计状态并写台账（[§8](#8-状态文档与脚本)）。
 
 ### 6.3 选项对话框
 
@@ -477,125 +460,7 @@ Initializing file filters → Restoring window state → Populate saved styles �
 
 ---
 
-## 7. 内置检查
-
-### 7.1 设计
-
-检查不是 pytest 用例，而是**挂在应用启动流程里的函数**：每个模块暴露 `run(app)`（部分为 `runReport(app)`），由 `check.py` 在窗口构造完成后调用。每条断言都在真实主窗口、真实画布、真实 `QgsSettings` 下执行，因此能覆盖"只有经真实启动流程才会出现"的问题（选项窗口打不开、启动消息缺段、控制台不恢复等）。
-
-分工：
-
-| 文件 | 职责 |
-| --- | --- |
-| `main.py` | 应用入口，只做启动：参数、档案、样式/主题/翻译、构造窗口、事件循环、退出 |
-| `check.py` | 检查运行器：检查标志、分派到 `tests/src/python/`、写报告与截图、决定退出码 |
-| `main.py::buildSession/runApplication` | 两者共用的启动流程，检查因此跑在真实窗口上而不是模拟环境 |
-
-### 7.2 运行
-
-**一项检查 = 一次进程调用**：`check.py` 一次只执行第一个命中的标志。
-
-```powershell
-$env:QT_QPA_PLATFORM='offscreen'
-& 'C:\OSGeo4W\bin\python-qgis-ltr.bat' check.py --check          # 默认套件（聚合 widgets/actions 检查）
-& 'C:\OSGeo4W\bin\python-qgis-ltr.bat' check.py --startup-test   # 启动契约
-& 'C:\OSGeo4W\bin\python-qgis-ltr.bat' check.py --georeferencer-test
-```
-
-全量回归（20 项，交付前的验证矩阵）：
-
-```powershell
-$env:QT_QPA_PLATFORM='offscreen'
-$python = 'C:\OSGeo4W\bin\python-qgis-ltr.bat'
-$flags = @('--check','--startup-test','--profile-test','--layertree-test','--data-actions-test',
-           '--mesh-edit-test','--mesh-calculator-test','--georeferencer-test','--remaining-actions-test',
-           '--dwg-import-test','--statusbar-test','--customization-test','--trim-extend-test',
-           '--partial-actions-test','--annotation-test','--labeling-test','--shape-test',
-           '--view-actions-test','--decoration-test','--toolbar-test')
-$fail = @()
-foreach ($f in $flags) {
-  & $python check.py $f *> $null
-  if ($LASTEXITCODE -ne 0) { $fail += $f; "FAILED: $f" }
-}
-"ran $($flags.Count) checks; failures: $($fail.Count)"
-```
-
-### 7.3 结果与判定
-
-- 报告写到 `output/<name>.json`：`check.json`（默认套件）、`startup-test.json`、`georeferencer-test.json`…；同目录还会保存一张窗口截图 `qgis-python.png`。
-- 报告含 `checks`（人可读检查项）与 `runtimeErrors`：`main.py` 安装的 `sys.excepthook` 把未处理异常同时送入消息栏、日志面板和 `window.runtimeErrors`；后者非空即判该检查失败。
-- 失败时退出码非 0，并在 stderr 给出断言位置。
-
-### 7.4 隔离与环境
-
-- 检查模式（`--check` 或任何 `--xxx-test`）会把 `QSettings` 用户路径重定向到 `.runtime/check-settings`，并使用 `.runtime/profile` 作为配置档案，因此**不会触碰你的真实 profile**；检查跳过启动画面，并把画布切到前台。
-- 无头运行必须 `QT_QPA_PLATFORM=offscreen`。离屏下字体/布局噪声多（`QFontDatabase`、`propagateSizeHints`、`QMimeDatabase` 警告属正常），涉及文本渲染的断言不要依赖离屏字体度量。
-- 时序敏感：涉及画布几何、工具栏布局、鼠标事件的断言要留 `processEvents()`，或把瞄准点从角点向内偏移（`tests/src/python/test_qgisapp_partialactions.py` 就是这么处理节点拾取的）。
-- 检查若自己写了设置，请在结束时恢复（先例：`test_qgisapp_georeferencer.py` 恢复最近工程列表，`test_qgisapp_startup.py` 清除 `UI/pythonConsoleVisible`）。
-- 打开 Python 控制台会把 `sys.stdout` 重定向进控制台部件（原生行为），需要真实 `fileno()` 的调用会失败；调试脚本写文件而非 `print`。
-
-### 7.5 新增一项检查
-
-1. 在 `tests/src/python/` 新建 `test_qgisapp_xxx.py`，实现 `def run(app)` 并 `return dict(checks=[...])`（或 `runReport`）。
-2. 在 `check.py` 的 `CHECKS` 表加一行：`('--xxx-test', 'test_qgisapp_xxx', 'run')`。报告文件名由标志自动推导（`--xxx-test` → `output/xxx-test.json`），标志也会自动出现在 `check.py --help` 里。
-3. 单独跑一次：`python check.py --xxx-test`；再把它加进全量回归列表。
-
-### 7.6 输入数据、生成物与检查套件
-
-| 目录 | 性质 | 能否删除 |
-| --- | --- | --- |
-| `manifests/` | **应用要读的输入数据**，随仓库提供：上游 action 清单（222 条）、动态工具栏 action 目录、图标表。`createActions()`、`setTheme()`、形状/网格/地理配准工具栏、`coverage()` 都从这里读 | 不建议：删了会丢掉上游基线——动作清单退化为"从当前界面自动发现"，形状/网格工具栏的按钮分组与地理配准动作表也会缺失 |
-| `output/` | **生成物**，`.gitignore` 已排除：`implementation-status.json`（程序启动时写）、`options-status.json`（构造选项对话框时写）、`action-source-audit.json`（审计脚本写）、检查报告与截图 | 可以随时整目录删除：写入处都会自动 `mkdir`，需要时会重建 |
-| `tests/` | **检查套件**，`.gitignore` 已排除，不随仓库提供 | 可以删除：`main.py` 不 import 它，应用照常运行；只是 `check.py` 会打印一行 "未找到检查模块 …" 并退出 |
-
-补充说明：
-
-- 检查与应用是分开的：`main.py` 不 import `check.py`，也不 import `tests/`。
-- `功能移植清单.md` 由程序启动时重写，不要手工编辑；`output/` 下的报告同样不要手工编辑。
-- 上游清单需要重建时（换一份 QGIS 源码树），设置 `QGIS_SOURCE_ROOT` 后运行 `scripts/sync_upstream.py`、`scripts/sync_toolbar_actions.py`、`scripts/sync_resources.py`，它们会写回 `manifests/`。
-
----
-
-## 8. 状态文档与脚本
-
-| 文件 | 生成者 | 用途 | 何时重跑 |
-| --- | --- | --- | --- |
-| `功能移植清单.md` | 启动时 `QgisApp.writeCoverage()` | 面向人的 action 状态表（中文标签） | 每次启动自动更新，已入库 |
-| `output/implementation-status.json` | 同上 | 机器可读状态（`status`/`handler`/`note`/`implementationState`） | 同上 |
-| `manifests/upstream-actions.json` | `scripts/sync_upstream.py` | 从上游 `qgisapp.ui` + `qgisapp.cpp` 提取的 222 条 action 与槽映射，GPS/3D 标为排除 | 上游 UI/源码更新时 |
-| `manifests/upstream-toolbar-actions.json` | `scripts/sync_toolbar_actions.py` | 运行时创建的动态 action 目录（工具栏/接口扩展点） | 上游更新时 |
-| `manifests/upstream-icons.json` | `scripts/sync_resources.py` | 图标清单（同时重写 `images/__init__.py` 的主题图标映射） | 资源更新时 |
-| `output/action-source-audit.json` | `scripts/audit_upstream_actions.py` | 逐条 action 的源码级审计证据 | 需要复核时 |
-| `output/options-status.json` | 构造选项对话框时由 `src/app/options/qgsoptions.py` 写出 | 控件接线清单（`implementedControls`/`unportedControls`/页数） | 每次构造选项对话框时 |
-| `scripts/sync_options.py` | — | 从上游导入选项表单与字面量绑定，重写 `src/app/options/qgsoptionsbindings.py` | 上游选项表单变化时 |
-| `scripts/audit_options.py` | — | 逐页打印控件接线与未接线项（stdout） | 排查选项接线时 |
-| `scripts/audit_toolbars.py` | — | 对照 `.ui` 复查运行时工具栏排列 | 改工具栏时 |
-| `scripts/exercise_options.py` | — | 逐页构造并应用选项对话框（模态打桩），定位会抛异常的页 | 改选项时 |
-| `scripts/update_porting_status.py` | 被程序与人工共用 | 状态标签与清单渲染（`PARTIAL_ACTIONS`、`ui-placeholder` 判定在此） | 状态口径变化时 |
-
-生成/重跑（先设置源码树路径）：
-
-```powershell
-$env:QGIS_SOURCE_ROOT = 'C:\Users\worker306\Desktop\QGIS-final-3_34_10'
-python scripts/sync_upstream.py
-python scripts/sync_toolbar_actions.py
-python scripts/update_porting_status.py
-```
-
-状态枚举（`implementationState` → 清单标签）：
-
-| 状态 | 标签 | 含义 |
-| --- | --- | --- |
-| `implemented` | 已接入 | 已实现且有运行时检查覆盖 |
-| `partial` | 部分实现 | 已实现但受后端能力限制（当前仅 DWG 导入） |
-| `ui-placeholder` | 已接入（隐藏插入锚点） | `.ui` 里的分隔符占位对象，无行为 |
-| `excluded-gps` | 排除（范围外：GPS/3D） | 按项目范围不做 |
-| `not-ported` | 未实现 | 当前为 0 |
-| `blocked-bindings` | 部分实现（PyQGIS 绑定缺失） | 保留状态位；当前为空集，历史条目均已用更下层 API 完成 |
-
----
-
-## 9. 代码规范与红线
+## 7. 代码规范与红线
 
 **风格**
 
@@ -606,18 +471,17 @@ python scripts/update_porting_status.py
 
 **红线**
 
-1. **不引入回归**：改动后跑完全量 20 项检查（[§7.2](#72-运行)）。
+1. **不引入回归**：改动后至少手动走一遍受影响的界面路径，并确认启动无异常（见 [§10](#10-贡献流程)）。
 2. **不用伪实现充数**：做不了就写清限制。
 3. **不静默写错设置**：写 `QgsSettings` 前核对键名、默认值与原生一致（`locale/*`、`UI/*`、`qgis/*` 是历史事故高发区）。
 4. **不新增第三方依赖**：只用 OSGeo4W 自带的 Python/PyQt/QGIS。
 5. **不提交运行时产物与调试脚本**：`output/`、`.runtime/`、`images/images_rc.py`、`src/ui/ui_*.py` 已在忽略列表；临时脚本用完删除。
 6. **改 `.ui` 后重编译**（`scripts/build-ui.cmd`），并确认 `uic.loadUi` 回退路径同样可用。
 7. **判空用 `isDeleted()`**：`sip.isdeleted()` 只接受被包装的 C++ 对象，对纯 Python 协作对象会抛 `TypeError`（见 `src/app/qgisapp.py` 顶部 `isDeleted()`）。
-8. **检查调度保持"一个标志一项检查"**：按 [§7.5](#75-新增一项检查) 接入。
 
 ---
 
-## 10. 故障排查 FAQ
+## 8. 故障排查 FAQ
 
 **启动时报 `Problem with OTB installation: OTB folder is not set.`（CRITICAL）**
 这是 QGIS 自带 **OTB Provider 插件**的日志（`otbprovider/OtbAlgorithmProvider.py:126`）：Processing 启动时注册该 provider，它发现 Processing 里没有 OTB 目录（`OTB_FOLDER`）就记一条 CRITICAL 并跳过加载。本机未安装 OTB（`C:\OSGeo4W\apps` 下无 OTB，也没有 `otbApplicationLauncher*.exe`），因此这是预期结果，含义是"没有 OTB 那批遥感算法"；原生 QGIS 3.34.10 在同样未配置时也打印同一行。要用就装 OTB，并在 **设置 → 选项 → 处理 → 提供者 → OTB → OTB 文件夹** 指定路径（键 `Processing/Configuration/OTB_FOLDER`）；配置正确后日志变成 `Loading OTB 'x.y.z'.`。
@@ -648,7 +512,7 @@ offscreen 平台没有字体目录，属正常噪声；不要基于离屏字体�
 
 ---
 
-## 11. 已知差异与限制
+## 9. 已知差异与限制
 
 | 项 | 现状 | 原因 / 改进方向 |
 | --- | --- | --- |
@@ -658,26 +522,24 @@ offscreen 平台没有字体目录，属正常噪声；不要基于离屏字体�
 | 欢迎页自绘项 | 高度接近原生，非逐像素 | 自绘代理由 C++ 复刻；`QgsScopedQPainterState` 未绑定，用 `save()/restore()` 等价替换 |
 | 端口自创文案 | 保持中文 | 改成 `tr()` 会在中文界面显示英文；若要英文界面，应把这些文案的英文源串补进翻译目录 |
 | `QgsGui::nativePlatformInterface()` | 用 `QDesktopServices` 等价实现 | 该单例未绑定；"打开所在目录"等行为等价，调用路径不同 |
-| `tests/` 不入库 | 见 [§7.6](#76-输入数据生成物与检查套件) | 希望他人开箱即跑检查时，可调整 `.gitignore` 并把检查套件入库 |
 | Processing 提供者可执行性 | 取决于环境 | 例如 GRASS/OTB 需要各自安装与配置（见 FAQ）；端口负责注册与选项页，执行能力由 OSGeo4W 组件决定 |
 
 ---
 
-## 12. 贡献流程
+## 10. 贡献流程
 
 1. **定位原生实现**：在 3.34.10 源码树找到对应 `*.cpp/*.h`（应用层 `src/app`，界面组件 `src/gui`），读清调用顺序与设置键。
 2. **判断绑定可用性**：用 [§4.6](#46-实例五判断一个-qgis-类有没有-python-绑定) 的命令确认；不可用时按 [§5](#5-移植方法论硬规则) 选择手段。
 3. **实现**：文件名/类名/方法名对齐原生，注释标注原生位置。
-4. **自测**：先跑相关检查，再跑全量 20 项（[§7.2](#72-运行)）；必要时按 [§7.5](#75-新增一项检查) 补断言，优先加进 `--startup-test` 或对应子系统检查。
+4. **自测**：在真桌面平台启动一次，走一遍受影响的功能路径，并确认启动消息与日志无异常。
 5. **视觉验证（涉及界面时）**：用真桌面平台（不设 `QT_QPA_PLATFORM`）直接跑 `main.py` 并截图核对；离屏截图无字体、不可信。
-6. **更新状态**：确认 `功能移植清单.md` 的变化符合预期（不要手工编辑）。
 7. **清理与提交**：删除临时脚本与临时配置目录；提交信息写清"做了什么 + 对应原生位置"，一个主题一个提交。
 
 提交信息前缀沿用仓库现状：`修复…`、`实现…`、`本地化：…`。
 
 ---
 
-## 13. 参考
+## 11. 参考
 
 **原生源码（3.34.10）关键文件**
 
@@ -709,50 +571,48 @@ offscreen 平台没有字体目录，属正常噪声；不要基于离屏字体�
 | 改启动流程 | `main.py` + [§6.1](#61-启动时序mainpy-与原生-maincppqgisappcpp) |
 | 改欢迎页/最近工程 | [§6.4](#64-最近工程欢迎页模板自绘列表) |
 | 改一条翻译 | [§4.5](#45-实例四一条界面文字是怎么被翻译的) + [§6.6](#66-本地化) |
-| 加一项检查 | [§7.5](#75-新增一项检查)（`check.py` 的 `CHECKS` 表加一行即可） |
-| 看当前完成度 | `功能移植清单.md`、`output/implementation-status.json` |
+| 看某功能对应哪个原生文件 | [§11](#11-参考) 的原生文件表 |
 | 排查会抛异常的选项页 | `scripts/exercise_options.py`、`window.runtimeErrors` |
 
 ---
 
-## 附录 A：功能与检查矩阵
+## 附录 A：功能与入口速查
 
 各子系统的入口、对应检查与报告文件。所有检查当前全部通过（20/20）。
 
-| 子系统 | 主要入口 | 检查标志 → 报告 |
-| --- | --- | --- |
-| 主窗口/动作总览（含属性表、控制台停靠、测量、选择、统计摘要、顶点编辑器、地图主题、图例过滤、地图提示） | 菜单与各工具栏 | `--check` → `output/check.json` |
-| 启动契约（分阶段启动消息、欢迎页、`projOpenAtLaunch` 四态、最近工程存储、控制台停靠） | 启动过程 | `--startup-test` → `output/startup-test.json` |
-| 配置档案（解析、询问策略、`--profile`/`-S`、退出写回 `lastProfile`） | 设置 → 用户配置 | `--profile-test` → `output/profile-test.json` |
-| 界面自定义（六类配置树、搜索、捕获 `Ctrl+M`、INI 导入导出、应用/重置/取消） | 设置 → 界面自定义 | `--customization-test` → `output/customization-test.json` |
-| 状态栏（坐标/范围、比例尺与锁定、放大镜、旋转、渲染进度、CRS 与日志按钮） | 状态栏 | `--statusbar-test` → `output/statusbar-test.json` |
-| 图层树右键（更改/修复数据源、可见比例尺缩放、栅格属性表、组 WMS 数据） | 图层面板右键 | `--layertree-test` → `output/layertree-test.json` |
-| 数字化与 CAD（移动/复制、分割、重塑、增删环、部件） | 高级数字化工具栏 | `--check` |
-| 修剪/延伸要素（线段捕捉、两侧修剪/延伸、Z/M、多部件、跨 CRS、拓扑节点、撤销） | 高级数字化工具栏 | `--trim-extend-test` → `output/trim-extend-test.json` |
-| 形状数字化（5 圆/4 椭圆/4 矩形/3 正多边形/半径圆弧，共 17 项） | 形状工具栏 | `--shape-test` → `output/shape-test.json` |
-| 填充环、添加环、添加部件与形状共用捕获 | 高级数字化工具栏 | `--shape-test`、`--check` |
-| 测量（距离/面积/角度/方位角，单位切换、椭球/平面、撤销） | 属性工具栏测量下拉 | `--check` |
-| 选择（矩形/多边形/自由手绘/半径，Shift/Ctrl 修饰语义） | 选择工具栏 | `--check` |
-| 统计摘要（字段/表达式、仅选中要素、后台可取消） | 视图菜单 / 属性工具栏 | `--check` |
-| 顶点编辑器（X/Y/Z/M 表格、双击修改、撤销、定位） | 顶点工具下拉 / 面板菜单 | `--check` |
-| 装饰：网格、布局范围、比例尺、图片、标题、版权、指北针 | 视图 → 装饰 | `--decoration-test` → `output/decoration-test.json` |
-| 注记：旧式（文本/SVG/HTML/表单）、新式注记图层、修改注记工具 | 注记工具栏 | `--annotation-test`、`--partial-actions-test` |
-| 报表（章节树、字段分组、页眉/页脚、PDF 导出、工程保存） | 工程 → 新建报表 | `--partial-actions-test` → `output/partial-actions-test.json` |
-| 标注工具栏九个动作、修改标注、高亮固定标注、显示未放置标注 | 标注工具栏 | `--labeling-test` → `output/labeling-test.json` |
-| 高程剖面（图层树、剖面绘制/拾取、测量、X 轴缩放、单位、图片/PDF 导出） | 视图 → 高程剖面 | `--view-actions-test` → `output/view-actions-test.json` |
-| 网格编辑（三角化、翻转/合并边、新面预览、Z 修改、删除快捷键、撤销、坐标变换） | 网格工具栏 | `--mesh-edit-test` → `output/mesh-edit-test.json` |
-| 网格计算器、新建网格图层 | 网格菜单 | `--mesh-calculator-test` → `output/mesh-calculator-test.json` |
-| DWG/DXF 导入（图层选择、分组/合并、三种块模式、样式与标注映射） | 图层 → 导入 CAD | `--dwg-import-test` → `output/dwg-import-test.json` |
-| 数据类动作（DXF 导出、新建 SpatiaLite 图层、粘贴为新图层、要素动作、嵌入图层） | 工程/编辑菜单 | `--data-actions-test` → `output/data-actions-test.json` |
-| 形状捕获与网格批处理补充 | — | `--remaining-actions-test` → `output/remaining-actions-test.json` |
-| 工具栏运行时排列与动态按钮（注记创建、文字属性、Web 扩展接口） | 各工具栏 | `--toolbar-test` → `output/toolbar-test.json` |
-| 地理配准（24 个 Action、GCP、变换、栅格/矢量输出、GDAL 脚本） | 栅格 → 地理配准 | `--georeferencer-test` → `output/georeferencer-test.json` |
-| 自定义投影（原生 CRS 编辑表单、批量删除、取消不写入） | 设置 → 自定义投影 | `tests/src/python/test_qgisapp_customprojection.py` → `output/custom-projection-test.json` |
-| 剖面图层树与网格顶点移动 | — | `tests/src/python/test_qgisapp_profilemesh.py` → `output/profile-mesh-test.json` |
-| 选项对话框（26 页：常规/系统/用户配置/CRS/变换/数据源/GDAL/渲染/栅格/矢量/画布/地图工具/数字化/高程/颜色/字体/布局/变量/认证/网络/定位器/加速/代码编辑器/控制台/高级/处理） | 设置 → 选项 | `--check`（页面构造）、`scripts/exercise_options.py`（逐页构造） |
-| 本地化（语言列表、覆盖开关、249 条原生字符串翻译） | 设置 → 选项 → 常规 → 本地化语言环境 | `--startup-test`（含翻译解析断言） |
-| 主题与样式（`UI/UITheme`、`qgis/style`、fusion 规则、图标尺寸） | 设置 → 选项 → 常规 → 应用程序 | `--startup-test`、`--toolbar-test` |
+| 子系统 | 主要入口 |
+| --- | --- |
+| 主窗口/动作总览（含属性表、控制台停靠、测量、选择、统计摘要、顶点编辑器、地图主题、图例过滤、地图提示） | 菜单与各工具栏 |
+| 启动契约（分阶段启动消息、欢迎页、`projOpenAtLaunch` 四态、最近工程存储、控制台停靠） | 启动过程 |
+| 配置档案（解析、询问策略、`--profile`/`-S`、退出写回 `lastProfile`） | 设置 → 用户配置 |
+| 界面自定义（六类配置树、搜索、捕获 `Ctrl+M`、INI 导入导出、应用/重置/取消） | 设置 → 界面自定义 |
+| 状态栏（坐标/范围、比例尺与锁定、放大镜、旋转、渲染进度、CRS 与日志按钮） | 状态栏 |
+| 图层树右键（更改/修复数据源、可见比例尺缩放、栅格属性表、组 WMS 数据） | 图层面板右键 |
+| 数字化与 CAD（移动/复制、分割、重塑、增删环、部件） | 高级数字化工具栏 |
+| 修剪/延伸要素（线段捕捉、两侧修剪/延伸、Z/M、多部件、跨 CRS、拓扑节点、撤销） | 高级数字化工具栏 |
+| 形状数字化（5 圆/4 椭圆/4 矩形/3 正多边形/半径圆弧，共 17 项） | 形状工具栏 |
+| 填充环、添加环、添加部件与形状共用捕获 | 高级数字化工具栏 |
+| 测量（距离/面积/角度/方位角，单位切换、椭球/平面、撤销） | 属性工具栏测量下拉 |
+| 选择（矩形/多边形/自由手绘/半径，Shift/Ctrl 修饰语义） | 选择工具栏 |
+| 统计摘要（字段/表达式、仅选中要素、后台可取消） | 视图菜单 / 属性工具栏 |
+| 顶点编辑器（X/Y/Z/M 表格、双击修改、撤销、定位） | 顶点工具下拉 / 面板菜单 |
+| 装饰：网格、布局范围、比例尺、图片、标题、版权、指北针 | 视图 → 装饰 |
+| 注记：旧式（文本/SVG/HTML/表单）、新式注记图层、修改注记工具 | 注记工具栏 |
+| 报表（章节树、字段分组、页眉/页脚、PDF 导出、工程保存） | 工程 → 新建报表 |
+| 标注工具栏九个动作、修改标注、高亮固定标注、显示未放置标注 | 标注工具栏 |
+| 高程剖面（图层树、剖面绘制/拾取、测量、X 轴缩放、单位、图片/PDF 导出） | 视图 → 高程剖面 |
+| 网格编辑（三角化、翻转/合并边、新面预览、Z 修改、删除快捷键、撤销、坐标变换） | 网格工具栏 |
+| 网格计算器、新建网格图层 | 网格菜单 |
+| DWG/DXF 导入（图层选择、分组/合并、三种块模式、样式与标注映射） | 图层 → 导入 CAD |
+| 数据类动作（DXF 导出、新建 SpatiaLite 图层、粘贴为新图层、要素动作、嵌入图层） | 工程/编辑菜单 |
+| 形状捕获与网格批处理补充 | — |
+| 工具栏运行时排列与动态按钮（注记创建、文字属性、Web 扩展接口） | 各工具栏 |
+| 地理配准（24 个 Action、GCP、变换、栅格/矢量输出、GDAL 脚本） | 栅格 → 地理配准 |
+| 自定义投影（原生 CRS 编辑表单、批量删除、取消不写入） | 设置 → 自定义投影 |
+| 剖面图层树与网格顶点移动 | — |
+| 选项对话框（26 页：常规/系统/用户配置/CRS/变换/数据源/GDAL/渲染/栅格/矢量/画布/地图工具/数字化/高程/颜色/字体/布局/变量/认证/网络/定位器/加速/代码编辑器/控制台/高级/处理） | 设置 → 选项 |
+| 本地化（语言列表、覆盖开关、249 条原生字符串翻译） | 设置 → 选项 → 常规 → 本地化语言环境 |
+| 主题与样式（`UI/UITheme`、`qgis/style`、fusion 规则、图标尺寸） | 设置 → 选项 → 常规 → 应用程序 |
 
-> 说明：
-> 1. 除最后两行外，表中各行均由 [§7.2](#72-运行) 的 20 项检查覆盖，全部通过；最后两行（自定义投影、剖面树/网格移动）是**直接运行**的检查模块（`python-qgis-ltr.bat tests/src/python/xxx.py`），不在这 20 个标志里，同样已验证通过（exit 0、`errors: []`）。
+> 说明：表中的子系统均已接入并在当前环境验证；第三方插件、服务器连接与各类数据格式建议用实际数据再验证一次。
 > 2. 矩阵说明的是"该功能由哪项检查覆盖"。检查通过表示该批行为在当前环境验证通过，第三方插件、服务器连接、各类数据格式仍建议用实际数据验证。

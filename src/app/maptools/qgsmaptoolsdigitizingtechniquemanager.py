@@ -3,9 +3,7 @@
 The 3.34 shape registry is not bound. Keep its metadata IDs and compose the
 Python CAD tools with the native capture tool which owns feature completion.
 """
-import json
 from functools import partial
-from pathlib import Path
 
 from qgis.PyQt import sip
 from qgis.PyQt.QtCore import QCoreApplication
@@ -29,6 +27,28 @@ from .qgsmaptoolshaperectangleextent import QgsMapToolShapeRectangleExtent
 from .qgsmaptoolshaperegularpolygon2points import QgsMapToolShapeRegularPolygon2Points
 from .qgsmaptoolshaperegularpolygoncentercorner import QgsMapToolShapeRegularPolygonCenterCorner
 from .qgsmaptoolshaperegularpolygoncenterpoint import QgsMapToolShapeRegularPolygonCenterPoint
+
+# 形状菜单：上游 QgsShapeToolButton 的分组、图标与标题（对应 3.34 的
+# shape registry，未绑定，按原版顺序与分组内联）。
+SHAPE_MENU = (
+    ('circle-from-2-points', 'Circle', '/mActionCircle2Points.svg', 'Circle from 2 points'),
+    ('circle-from-2-tangents-1-point', 'Circle', '/mActionCircle2TangentsPoint.svg', 'Circle from 2 tangents and a point'),
+    ('circle-from-3-points', 'Circle', '/mActionCircle3Points.svg', 'Circle from 3 points'),
+    ('circle-from-3-tangents', 'Circle', '/mActionCircle3Tangents.svg', 'Circle from 3 tangents'),
+    ('circle-by-a-center-point-and-another-point', 'Circle', '/mActionCircleCenterPoint.svg', 'Circle by a center point and another point'),
+    ('circular-string-by-radius', 'Curve', '/mActionCircularStringRadius.svg', 'Circular string by radius'),
+    ('ellipse-center-2-points', 'Ellipse', '/mActionEllipseCenter2Points.svg', 'Ellipse from center and 2 points'),
+    ('ellipse-center-point', 'Ellipse', '/mActionEllipseCenterPoint.svg', 'Ellipse from center and a point'),
+    ('ellipse-from-extent', 'Ellipse', '/mActionEllipseExtent.svg', 'Ellipse from Extent'),
+    ('ellipse-from-foci', 'Ellipse', '/mActionEllipseFoci.svg', 'Ellipse from Foci'),
+    ('rectangle-from-3-points-distance', 'Rectangle', '/mActionRectangle3PointsDistance.svg', 'Rectangle from 3 points (distance)'),
+    ('rectangle-from-3-points-projected', 'Rectangle', '/mActionRectangle3PointsProjected.svg', 'Rectangle from 3 points (projected)'),
+    ('rectangle-from-center-and-a-point', 'Rectangle', '/mActionRectangleCenter.svg', 'Rectangle from center and a point'),
+    ('rectangle-from-extent', 'Rectangle', '/mActionRectangleExtent.svg', 'Rectangle from extent'),
+    ('regular-polygon-from-2-points', 'RegularPolygon', '/mActionRegularPolygon2Points.svg', 'Regular polygon from 2 points'),
+    ('regular-polygon-from-center-and-a-corner', 'RegularPolygon', '/mActionRegularPolygonCenterCorner.svg', 'Regular polygon from center and a corner'),
+    ('regular-polygon-from-center-point', 'RegularPolygon', '/mActionRegularPolygonCenterPoint.svg', 'Regular polygon from center and a point'),
+)
 
 
 class QgsMapToolsDigitizingTechniqueManager:
@@ -70,11 +90,8 @@ class QgsMapToolsDigitizingTechniqueManager:
         self.mDigitizeModeToolButton.setDefaultAction(app.mActionDigitizeWithSegment)
         actions = app.mDigitizeToolBar.actions()
         app.mDigitizeToolBar.insertWidget(actions[3] if len(actions) > 3 else None, self.mDigitizeModeToolButton)
-        catalog = Path(__file__).resolve().parents[3] / 'manifests/upstream-toolbar-actions.json'
-        for item in json.loads(catalog.read_text(encoding='utf-8'))['actions']:
-            toolId = item['sourceKey'].removeprefix('shape:')
+        for toolId, category, icon, text in SHAPE_MENU:
             if toolId not in self.SHAPE_TOOLS: continue
-            category = item['group']
             button = self.mShapeCategoryButtons.get(category)
             if button is None:
                 button = QToolButton(app.mShapeDigitizeToolBar)
@@ -84,8 +101,8 @@ class QgsMapToolsDigitizingTechniqueManager:
                 self.mShapeCategoryButtons[category] = button
             # Upstream metadata uses QObject::tr.
             cls = self.SHAPE_TOOLS[toolId]
-            title = QCoreApplication.translate('QObject', item['text'])
-            action = QAction(QgsApplication.getThemeIcon(item['icon']), title, button.menu())
+            title = QCoreApplication.translate('QObject', text)
+            action = QAction(QgsApplication.getThemeIcon(icon), title, button.menu())
             action.setCheckable(True)
             action.setData(toolId)
             clicks = cls.pointCount - 1
@@ -97,9 +114,6 @@ class QgsMapToolsDigitizingTechniqueManager:
             key = self.SETTINGS + 'categories/' + category + '/default'
             if button.defaultAction() is None or app.mSettings.value(key, '') == toolId:
                 button.setDefaultAction(action)
-            app.mDynamicActions[item['sourceKey']] = {
-                'action': action, 'handler': 'setShapeTool', 'toolbar': item['toolbar'],
-                'note': getattr(cls, 'instructions', '预览/右键完成/取消/退点，正多边形边数') + '；原版分组/图标、原生几何与父工具完成；目标 Z/M、平面捕捉高程、圆心辅助、圆弧续接、环/填充环/部件及新增要素拓扑已接入。17 个形状按钮与共用完成流程通过集中检查。'}
 
     def parentAvailable(self, parent):
         if parent is None or sip.isdeleted(parent): return False

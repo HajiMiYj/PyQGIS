@@ -28,14 +28,10 @@ class QgsAppLayerTreeViewMenuProvider(QgsLayerTreeViewMenuProvider):
                     native.deleteLater()
             action.triggered.connect(invoke)
             self.mContextActions[name] = action
-            app.mDynamicActions['layertree:'+name] = dict(action=action, handler=name,
-                note='图层树右键菜单调用原生默认动作；使用当前选择与节点。', inInterface=True)
         self.actionShowLabels = QAction(QCoreApplication.translate('QObject', 'Show label'), app)
         self.actionShowLabels.setObjectName('actionShowLabels')
         self.actionShowLabels.setCheckable(True)
         self.actionShowLabels.toggled.connect(self.toggleLabels)
-        app.mDynamicActions['layertree:actionShowLabels'] = dict(action=self.actionShowLabels, handler='toggleLabels',
-            note='所选矢量/矢量瓦片标注显隐；无配置时使用原生默认标注设置。', inInterface=True)
         for name, label, note in [
                 ('changeDataSource', '更改数据源…', '原版 QgsDataSourceSelectDialog 选择新数据源；修复无效图层、保留子集串、刷新图层树，并自动修复同路径的其他损坏图层。'),
                 ('zoomToLayerScale', '缩放到可见比例尺', '当前图层超出其比例尺可见范围时缩放到最近可见比例尺。'),
@@ -50,7 +46,6 @@ class QgsAppLayerTreeViewMenuProvider(QgsLayerTreeViewMenuProvider):
             else:
                 action.triggered.connect(getattr(app, name))
             self.mContextActions[name] = action
-            app.mDynamicActions['layertree:' + name] = dict(action=action, handler=name, note=note, inInterface=True)
 
     def toggleLabels(self, enabled):
         for node in self.mView.selectedLayerNodes():

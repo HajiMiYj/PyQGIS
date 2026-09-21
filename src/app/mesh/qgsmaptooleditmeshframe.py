@@ -4,9 +4,7 @@ Native mesh/triangular-mesh pointers are SIP_SKIP. Read current vertex values
 through native mesh expressions; never use a provider snapshot of unsaved edits.
 Face operations currently target the native expression-selected face IDs.
 """
-import json
 import math
-from pathlib import Path
 from qgis.PyQt import sip
 from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.PyQt.QtGui import QColor
@@ -18,6 +16,25 @@ from qgis.core import (Qgis, QgsMesh, QgsMeshLayer, QgsExpression, QgsExpression
     QgsMeshEditForceByPolylines, QgsLineString, QgsCsException, QgsMeshTransformVerticesByExpression)
 from qgis.gui import (QgsMapToolAdvancedDigitizing, QgsRubberBand, QgsDoubleSpinBox,
     QgsUnitSelectionWidget, QgsIdentifyMenu)
+
+
+# 网格工具栏/菜单动作：上游为运行时创建的动态 action，这里按原版顺序、图标与
+# 落点（toolbar / mesh menu / map context menu）内联。
+MESH_ACTIONS = (
+    ('mActionDigitizing', '', 'Digitize Mesh Elements', '/mActionMeshDigitizing.svg', 'toolbar'),
+    ('mActionSelectByPolygon', 'ActionMeshSelectByPolygon', 'Select Mesh Elements by Polygon', '/mActionMeshSelectPolygon.svg', 'toolbar'),
+    ('mActionSelectByExpression', 'ActionMeshSelectByExpression', 'Select Mesh Elements by Expression', '/mActionMeshSelectExpression.svg', 'toolbar'),
+    ('mActionTransformCoordinates', '', 'Transform Vertices Coordinates', '/mActionMeshTransformByExpression.svg', 'toolbar'),
+    ('mActionForceByLines', '', 'Force by Selected Geometries', '/mActionMeshEditForceByVectorLines.svg', 'toolbar'),
+    ('mActionReindexMesh', '', 'Reindex Faces and Vertices', '/mActionMeshReindex.svg', 'mesh menu'),
+    ('mActionRemoveVerticesFillingHole', '', 'Remove Selected Vertices and Fill Hole(s)', '', 'map context menu'),
+    ('mActionDelaunayTriangulation', '', 'Delaunay Triangulation with Selected Vertices', '', 'map context menu'),
+    ('mActionFacesRefinement', '', 'Refine Current Face', '', 'map context menu'),
+    ('mActionRemoveVerticesWithoutFillingHole', '', 'Remove Selected Vertices without Filling Hole(s)', '', 'map context menu'),
+    ('mActionRemoveFaces', '', 'Remove Current Face', '', 'map context menu'),
+    ('mActionSplitFaces', '', 'Split Current Face', '', 'map context menu'),
+    ('mWidgetActionForceByLine', '', 'Force by Line Settings', '', 'toolbar submenu'),
+)
 
 
 class QgsMeshEditForceByLineAction(QWidgetAction):
@@ -129,28 +146,16 @@ class QgsMapToolEditMeshFrame(QgsMapToolAdvancedDigitizing):
             'mActionDelaunayTriangulation': self.delaunayTriangulation,
             'mActionForceByLines': lambda: self.activateWithState('ForceByLines'),
         }
-        catalog = Path(__file__).resolve().parents[3] / 'manifests/upstream-toolbar-actions.json'
-        for row in json.loads(catalog.read_text(encoding='utf-8'))['actions']:
-            key = row['sourceKey'].removeprefix('mesh:')
+        for key, objectName, text, icon, location in MESH_ACTIONS:
             if key not in callbacks: continue
-            action = QAction(QgsApplication.getThemeIcon(row.get('icon', '')), self.tr(row['text']), self)
-            if row['objectName']: action.setObjectName(row['objectName'])
+            action = QAction(QgsApplication.getThemeIcon(icon), self.tr(text), self)
+            if objectName: action.setObjectName(objectName)
             if key in ('mActionDigitizing', 'mActionSelectByPolygon', 'mActionForceByLines'): action.setCheckable(True)
             action.triggered.connect(lambda checked=False, callback=callbacks[key]: callback())
             self.mActions[key] = action
             setattr(self, key, action)
-            if row['location'] == 'toolbar': self.mApp.mMeshToolBar.addAction(action)
-            elif row['location'] == 'mesh menu': self.mApp.mMeshMenu.addAction(action)
-            note = '原生 QgsMeshEditor 操作，接入编辑状态与撤销；面操作使用表达式选中 ID，地图直接拾取面尚未移植。'
-            if key == 'mActionReindexMesh': note = '原生图层 reindex；确认后重新编号顶点/面、清空选择并更新画布，撤销历史按原版清除。'
-            if key in ('mActionRemoveVerticesFillingHole', 'mActionRemoveVerticesWithoutFillingHole'):
-                note = '对选中顶点调用原生删除接口，反馈拓扑错误/未删除顶点并更新选择、画布和撤销状态。'
-            if key == 'mActionDigitizing': note = '顶点添加/选择/移动；已有顶点构面及原生有效性预览；选择两个公共边端点后翻转边/合并面；所选顶点平均 Z 显示、回车统一高程、原版删除快捷键与撤销。边/面直接拾取与完整拖动仍待补齐。'
-            if key == 'mActionSelectByPolygon': note = '多边形选择顶点，Shift 添加/Ctrl 移除；面触碰/完全包含选择未移植。'
-            if key == 'mActionTransformCoordinates': note = '原版停靠 UI；原生 XYZ 表达式计算/拓扑与数值校验、顶点预览、缓存结果应用及撤销。先预览后应用；修改表达式/选区或编辑网孔使旧结果失效；坐标导入开关随单顶点选择更新，并遵循工程小数位数。上述交互检查通过；完整面边预览待补。'
-            if key == 'mActionForceByLines': note = '左键绘制约束折线/右键完成，空闲时右键拾取线或面边界；捕捉 Z、CRS 转换、交点顶点、Z 插值、容差、原生网孔约束与撤销。'
-            if key == 'mActionDelaunayTriangulation': note = '使用 analysis 中原生 QgsMeshEditingDelaunayTriangulation；选中至少三个顶点后在右键菜单执行，保留 Z、过滤内部顶点和不兼容面，提示原生结果并支持撤销/重做。'
-            self.mApp.mDynamicActions[row['sourceKey']] = {'action': action, 'handler': key, 'toolbar': row['toolbar'], 'note': note, 'inInterface': True}
+            if location == 'toolbar': self.mApp.mMeshToolBar.addAction(action)
+            elif location == 'mesh menu': self.mApp.mMeshMenu.addAction(action)
         self.mWidgetActionForceByLine = QgsMeshEditForceByLineAction(self)
         self.mWidgetActionForceByLine.setMapCanvas(self.canvas())
         self.mActions['mWidgetActionForceByLine'] = self.mWidgetActionForceByLine
@@ -164,9 +169,6 @@ class QgsMapToolEditMeshFrame(QgsMapToolAdvancedDigitizing):
         self.mForceByLineButton.setDefaultAction(self.mActionForceByLines)
         self.mApp.mMeshToolBar.insertWidget(self.mActionForceByLines, self.mForceByLineButton)
         self.mApp.mMeshToolBar.removeAction(self.mActionForceByLines)
-        self.mApp.mDynamicActions['mesh:mWidgetActionForceByLine'] = {
-            'action': self.mWidgetActionForceByLine, 'handler': 'updateSettings', 'toolbar': 'mMeshToolBar',
-            'inInterface': True, 'note': '原版 QWidgetAction 四项设置、原版设置键持久化；直接用于线约束操作。'}
         self.mApp.mMeshToolBar.insertAction(self.mApp.mMeshToolBar.actions()[0] if self.mApp.mMeshToolBar.actions() else None, self.mApp.mActionToggleEditing)
         self.mApp.mMeshToolBar.addAction(self.mApp.mActionSaveLayerEdits)
 
