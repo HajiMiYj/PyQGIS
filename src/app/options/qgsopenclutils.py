@@ -47,11 +47,32 @@ def _library():
     global _LIBRARY
     if _LIBRARY is not None:
         return _LIBRARY or None
-    try:
-        library = ctypes.WinDLL('OpenCL')
-    except OSError:
+
+    import sys
+
+    # 按平台选择加载方式和库名
+    if sys.platform == 'win32':
+        candidates = ['OpenCL', 'OpenCL.dll']
+        loader = ctypes.WinDLL
+    elif sys.platform == 'darwin':
+        candidates = ['libOpenCL.dylib', 'OpenCL', '/System/Library/Frameworks/OpenCL.framework/OpenCL']
+        loader = ctypes.CDLL
+    else:  # linux / freebsd 等
+        candidates = ['libOpenCL.so.1', 'libOpenCL.so', 'OpenCL']
+        loader = ctypes.CDLL
+
+    library = None
+    for name in candidates:
+        try:
+            library = loader(name)
+            break
+        except (OSError, AttributeError):
+            continue
+
+    if library is None:
         _LIBRARY = False
         return None
+
     library.clGetPlatformIDs.argtypes = [ctypes.c_uint, ctypes.POINTER(ctypes.c_void_p),
                                          ctypes.POINTER(ctypes.c_uint)]
     library.clGetDeviceIDs.argtypes = [ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_uint,
