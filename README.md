@@ -1,7 +1,8 @@
 # QGIS Python 3.34.10
 
 本项目用 **PyQGIS + PyQt5** 在 OSGeo4W 上实现 QGIS 3.34.10 的**桌面应用层**：`main.py` 是程序入口，`src/app` 与 `src/gui` 里放的是QGIS源代码中 `src/app/*.cpp`、`src/gui/*.cpp` 在 Python 中的对应实现。
-[项目运行截图](https://i-blog.csdnimg.cn/direct/9f87707313eb465894535ea4a7e5f0dc.png)
+
+[项目运行截图]([https://i-blog.csdnimg.cn/direct/9f87707313eb465894535ea4a7e5f0dc.png](https://private-user-images.githubusercontent.com/81605750/655585211-7dff9920-a76b-4db7-84ff-9c00f366dbe4.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3ODk5NzYwMDcsIm5iZiI6MTc4OTk3NTcwNywicGF0aCI6Ii84MTYwNTc1MC82NTU1ODUyMTEtN2RmZjk5MjAtYTc2Yi00ZGI3LTg0ZmYtOWMwMGYzNjZkYmU0LnBuZz9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNjA5MjElMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjYwOTIxVDA3MjgyN1omWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPWEyNTFkZDY5OGIyZTEzODBjMmQ1MGRmYTI3NDZkNGQxNmNmY2ZmZWUxNjgyODE0YTc2NjhhMGZkMjc5YWIwMjAmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0JnJlc3BvbnNlLWNvbnRlbnQtdHlwZT1pbWFnZSUyRnBuZyJ9.LsMBi9G5zfXswlnPU6F0_kKW7yi3AXZwRLvx4li5BLQ))
 
 本项目用 **PyQGIS + PyQt5** 在 OSGeo4W 上实现 QGIS 3.34.10 的**桌面应用层**：`main.py` 是程序入口，`src/app` 与 `src/gui` 里放的是上游 `src/app/*.cpp`、`src/gui/*.cpp` 在 Python 中的对应实现。
 内核直接使用 OSGeo4W 的 `qgis-ltr`：`qgis.core`、`qgis.gui`、`qgis.PyQt` 都是原生二进制与绑定。
