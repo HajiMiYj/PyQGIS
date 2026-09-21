@@ -1,5 +1,7 @@
 # QGIS Python 3.34.10：桌面应用层的源码级移植
 
+[项目运行截图](https://i-blog.csdnimg.cn/direct/9f87707313eb465894535ea4a7e5f0dc.png)
+
 本项目用 **PyQGIS + PyQt5** 在 OSGeo4W 上实现 QGIS 3.34.10 的**桌面应用层**：`main.py` 是程序入口，`src/app` 与 `src/gui` 里放的是上游 `src/app/*.cpp`、`src/gui/*.cpp` 在 Python 中的对应实现。
 内核直接使用 OSGeo4W 的 `qgis-ltr`：`qgis.core`、`qgis.gui`、`qgis.PyQt` 都是原生二进制与绑定。
 移植基准是 QGIS `final-3_34_10` 源码树，写法遵循一条主线：**有 PyQGIS 绑定的类直接调用原生实现；没有绑定的，照 C++ 源码在 Python 里复刻同样的行为与命名。**
