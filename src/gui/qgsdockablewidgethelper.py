@@ -59,7 +59,6 @@ class QgsDockableWidgetHelper(QObject):
     def toggleDockMode(self, docked):
         if self.mIsDocked == docked: return
         old = self.mDock if self.mIsDocked else self.mDialog
-        visible = old.isVisible() if old else False
         if self.mDialog: QgsSettings().setValue(self.mKey + '/geometry', self.mDialog.saveGeometry())
         self.mWidget.setParent(self.mOwnerWindow)
         if old:
@@ -93,7 +92,13 @@ class QgsDockableWidgetHelper(QObject):
         self.mAction.setChecked(docked)
         self.mAction.blockSignals(False)
         QgsSettings().setValue(self.mKey + '/docked', docked)
-        self.setUserVisible(visible)
+        # Native QgsDockableWidgetHelper::toggleDockMode() ends the dock branch with
+        # mDock->setUserVisible(true): a freshly created dock is visible, which the
+        # caller may then hide. Treating "was the previous host visible" as the new
+        # visibility left every docked widget hidden on first creation.
+        if docked:
+            self.mDock.setUserVisible(True)
+            self.visibilityChanged.emit(True)
         self.dockModeToggled.emit(docked)
 
     def dispose(self):

@@ -192,10 +192,12 @@ class QgsWelcomePage(QWidget):
     def templateProjectItemActivated(self, index):
         if self.mApp is None:
             return
-        role = self._roles().NativePathRole
-        value = index.data(role)
+        value = index.data(self._roles().NativePathRole)
         if value is None or value == '':
-            self.mApp.newProject()
+            # Upstream calls QgisApp::newProject() here, which is a *signal*: calling
+            # it only switches to the canvas. The "New Empty Project" row has to run
+            # the real new-project path.
+            self.mApp.fileNewBlank()
         else:
             self.mApp.fileNewFromTemplate(value)
 

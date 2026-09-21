@@ -3490,12 +3490,44 @@ class QgisApp(QMainWindow):
         self.mMapCanvas.refresh()
 
     def showPythonDialog(self):
-        if not hasattr(self, 'mPythonConsole'):
-            from python.console.console import PythonConsole
-            self.mPythonConsole = PythonConsole(self)
-        self.mPythonConsole.setUserVisible(not self.mPythonConsole.isUserVisible())
-        if self.mPythonConsole.isUserVisible(): self.mPythonConsole.activate()
+        """Native QgisApp::showPythonDialog() -> console.show_console().
+
+        console.show_console() creates+shows on first call and toggles afterwards.
+        The port builds the console on its own dock host because the C++ base class
+        cannot join the main window's dock layout from a Python process.
+        """
+        from .qgspythonconsole import PythonConsoleDock
+        if getattr(self, 'mPythonConsole', None) is None:
+            self.mPythonConsole = PythonConsoleDock(self)
+            self.mPythonConsole.visibilityChangedConnect(self.onPythonConsoleVisibilityChanged)
+            # console.show_console() keeps the menu entry in sync itself:
+            # _console.visibilityChanged.connect(iface.actionShowPythonDialog().setChecked)
+            action = getattr(self, 'mActionShowPythonDialog', None)
+            if action is not None:
+                self.mPythonConsole.visibilityChangedConnect(action.setChecked)
+            self.mSettings.setValue('UI/pythonConsoleVisible', False)
+            self.mPythonConsole.show()
+            QTimer.singleShot(0, self.mPythonConsole.activate)
+        else:
+            self.mPythonConsole.setUserVisible(not self.mPythonConsole.isUserVisible())
+            if self.mPythonConsole.isUserVisible():
+                self.mPythonConsole.activate()
+        self.mSettings.setValue('UI/pythonConsoleVisible', self.mPythonConsole.isUserVisible())
         return self.mPythonConsole
+
+    def onPythonConsoleVisibilityChanged(self, visible):
+        self.mSettings.setValue('UI/pythonConsoleVisible', visible)
+
+    def restorePythonConsole(self):
+        """Reopen the console when the previous session left it open.
+
+        Upstream needs no such key because its C++ helper always docks the console,
+        so QMainWindow::restoreState() finds it. A lazily created dock cannot be
+        restored at all, so the port records the flag and recreates the dock before
+        restoreState() runs, which then restores its area and geometry.
+        """
+        if self.mSettings.value('UI/pythonConsoleVisible', False, type=bool):
+            self.showPythonDialog()
 
     def copyIdentifyValue(self):
         QgsApplication.clipboard().setText(
@@ -3775,6 +3807,9 @@ class QgisApp(QMainWindow):
         # between straight/curve/stream capture. Preserve the active technique.
         technique = getattr(self.mMapCanvas.mapTool(), 'currentCaptureTechnique', lambda: None)()
         savedState = self.mSettings.value('UI/state', b'')
+        # A lazily created dock cannot be restored, so recreate the console (if the
+        # last session had it open) before the state is applied.
+        self.restorePythonConsole()
         if not (savedState and self.restoreState(savedState)):
             self.restoreState(DEFAULT_UI_STATE)
         if technique is not None:
