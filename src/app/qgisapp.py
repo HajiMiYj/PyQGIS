@@ -3677,8 +3677,8 @@ class QgisApp(QMainWindow):
     def writeCoverage(self):
         from scripts.update_porting_status import writeChecklist
         status = self.coverage()
-        # docs/ 只放生成物，随时可以删除，所以写之前先确保目录存在。
-        statusPath = ROOT / 'docs/implementation-status.json'
+        # 生成物统一放在 output/（不入库），写之前确保目录存在。
+        statusPath = ROOT / 'output/implementation-status.json'
         statusPath.parent.mkdir(parents=True, exist_ok=True)
         statusPath.write_text(json.dumps(status, ensure_ascii=False, indent=2), encoding='utf-8')
         return writeChecklist(status)

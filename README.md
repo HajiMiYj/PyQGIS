@@ -17,7 +17,7 @@
 | 代码规模 | `src/app` 186 个模块、`src/gui` 12 个、`src/ui` 50 个 `.ui` |
 | 内置检查 | 20 项，全部通过（见 [§7](#7-内置检查)） |
 
-> 上表数字由程序自己统计：每次启动都会重写 `功能移植清单.md` 与 `docs/implementation-status.json`（见 [§8](#8-状态文档与脚本)）。
+> 上表数字由程序自己统计：每次启动都会重写 `功能移植清单.md` 与 `output/implementation-status.json`（见 [§8](#8-状态文档与脚本)）。
 
 ---
 
@@ -167,7 +167,7 @@ qgis_python/
 ├─ scripts/                     移植审计、同步与构建脚本（§8）
 ├─ tests/src/python/            27 个检查模块（未入库，见 §7.6）
 ├─ manifests/                   应用要读的清单数据（入库）：上游 action/工具栏/图标表
-├─ docs/                        生成的报告（未入库，可随时删除，缺了会自动重建）
+├─ output/                      运行与检查的产物：状态报告、截图、临时目录（被忽略）
 ├─ output/                      每次运行的产物：报告 JSON、临时目录、截图（被忽略）
 └─ .runtime/                    检查模式使用的隔离配置（被忽略）
 ```
@@ -545,13 +545,13 @@ foreach ($f in $flags) {
 | 目录 | 性质 | 能否删除 |
 | --- | --- | --- |
 | `manifests/` | **应用要读的输入数据**，随仓库提供：上游 action 清单（222 条）、动态工具栏 action 目录、图标表。`createActions()`、`setTheme()`、形状/网格/地理配准工具栏、`coverage()` 都从这里读 | 不建议：删了会丢掉上游基线——动作清单退化为"从当前界面自动发现"，形状/网格工具栏的按钮分组与地理配准动作表也会缺失 |
-| `docs/` | **生成物**，`.gitignore` 已排除：`implementation-status.json`（程序启动时写）、`options-status.json`（构造选项对话框时写）、`action-source-audit.json`（审计脚本写） | 可以随时整目录删除：写入处都会自动 `mkdir`，需要时会重建 |
+| `output/` | **生成物**，`.gitignore` 已排除：`implementation-status.json`（程序启动时写）、`options-status.json`（构造选项对话框时写）、`action-source-audit.json`（审计脚本写）、检查报告与截图 | 可以随时整目录删除：写入处都会自动 `mkdir`，需要时会重建 |
 | `tests/` | **检查套件**，`.gitignore` 已排除，不随仓库提供 | 可以删除：`main.py` 不 import 它，应用照常运行；只是 `check.py` 会打印一行 "未找到检查模块 …" 并退出 |
 
 补充说明：
 
 - 检查与应用是分开的：`main.py` 不 import `check.py`，也不 import `tests/`。
-- `功能移植清单.md` 由程序启动时重写，不要手工编辑；`docs/` 下的报告同样不要手工编辑。
+- `功能移植清单.md` 由程序启动时重写，不要手工编辑；`output/` 下的报告同样不要手工编辑。
 - 上游清单需要重建时（换一份 QGIS 源码树），设置 `QGIS_SOURCE_ROOT` 后运行 `scripts/sync_upstream.py`、`scripts/sync_toolbar_actions.py`、`scripts/sync_resources.py`，它们会写回 `manifests/`。
 
 ---
@@ -561,12 +561,12 @@ foreach ($f in $flags) {
 | 文件 | 生成者 | 用途 | 何时重跑 |
 | --- | --- | --- | --- |
 | `功能移植清单.md` | 启动时 `QgisApp.writeCoverage()` | 面向人的 action 状态表（中文标签） | 每次启动自动更新，已入库 |
-| `docs/implementation-status.json` | 同上 | 机器可读状态（`status`/`handler`/`note`/`implementationState`） | 同上 |
+| `output/implementation-status.json` | 同上 | 机器可读状态（`status`/`handler`/`note`/`implementationState`） | 同上 |
 | `manifests/upstream-actions.json` | `scripts/sync_upstream.py` | 从上游 `qgisapp.ui` + `qgisapp.cpp` 提取的 222 条 action 与槽映射，GPS/3D 标为排除 | 上游 UI/源码更新时 |
 | `manifests/upstream-toolbar-actions.json` | `scripts/sync_toolbar_actions.py` | 运行时创建的动态 action 目录（工具栏/接口扩展点） | 上游更新时 |
 | `manifests/upstream-icons.json` | `scripts/sync_resources.py` | 图标清单（同时重写 `images/__init__.py` 的主题图标映射） | 资源更新时 |
-| `docs/action-source-audit.json` | `scripts/audit_upstream_actions.py` | 逐条 action 的源码级审计证据 | 需要复核时 |
-| `docs/options-status.json` | 构造选项对话框时由 `src/app/options/qgsoptions.py` 写出 | 控件接线清单（`implementedControls`/`unportedControls`/页数） | 每次构造选项对话框时 |
+| `output/action-source-audit.json` | `scripts/audit_upstream_actions.py` | 逐条 action 的源码级审计证据 | 需要复核时 |
+| `output/options-status.json` | 构造选项对话框时由 `src/app/options/qgsoptions.py` 写出 | 控件接线清单（`implementedControls`/`unportedControls`/页数） | 每次构造选项对话框时 |
 | `scripts/sync_options.py` | — | 从上游导入选项表单与字面量绑定，重写 `src/app/options/qgsoptionsbindings.py` | 上游选项表单变化时 |
 | `scripts/audit_options.py` | — | 逐页打印控件接线与未接线项（stdout） | 排查选项接线时 |
 | `scripts/audit_toolbars.py` | — | 对照 `.ui` 复查运行时工具栏排列 | 改工具栏时 |
@@ -710,7 +710,7 @@ offscreen 平台没有字体目录，属正常噪声；不要基于离屏字体�
 | 改欢迎页/最近工程 | [§6.4](#64-最近工程欢迎页模板自绘列表) |
 | 改一条翻译 | [§4.5](#45-实例四一条界面文字是怎么被翻译的) + [§6.6](#66-本地化) |
 | 加一项检查 | [§7.5](#75-新增一项检查)（`check.py` 的 `CHECKS` 表加一行即可） |
-| 看当前完成度 | `功能移植清单.md`、`docs/implementation-status.json` |
+| 看当前完成度 | `功能移植清单.md`、`output/implementation-status.json` |
 | 排查会抛异常的选项页 | `scripts/exercise_options.py`、`window.runtimeErrors` |
 
 ---

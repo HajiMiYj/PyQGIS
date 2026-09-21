@@ -66,10 +66,10 @@ def writeChecklist(status):
 
 
 if __name__ == '__main__':
-    statusPath = root / 'docs/implementation-status.json'
+    statusPath = root / 'output/implementation-status.json'
     if not statusPath.exists():
         raise SystemExit(
-            f'缺少 {statusPath}。该文件由应用启动时生成（docs/ 只放生成物，可随时删除）：'
+            f'缺少 {statusPath}。该文件由应用启动时生成（生成物在 output/，不入库）：'
             '先运行一次 main.py，再执行本脚本。')
     status = json.loads(statusPath.read_text(encoding='utf-8'))
     for action in status['actions'] + status.get('dynamicActions', []):

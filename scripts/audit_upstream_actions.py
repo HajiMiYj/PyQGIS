@@ -15,10 +15,10 @@ SOURCE = Path(os.environ.get('QGIS_SOURCE_ROOT', r'C:\QGIS_COMPILE\QGIS-final-3_
 
 
 def main():
-    statusPath = ROOT / 'docs/implementation-status.json'
+    statusPath = ROOT / 'output/implementation-status.json'
     if not statusPath.exists():
         raise SystemExit(
-            f'缺少 {statusPath}。该文件由应用启动时生成（docs/ 只放生成物，可随时删除）：'
+            f'缺少 {statusPath}。该文件由应用启动时生成（生成物在 output/，不入库）：'
             '先运行一次 main.py，再执行本脚本。')
     status = json.loads(statusPath.read_text(encoding='utf-8'))
     static = {a['objectName'] for a in status['actions']}
@@ -49,8 +49,8 @@ def main():
                    uiActions=ui, cppCandidates=cpp,
                    confirmedMissing=[a['sourceKey'] for a in status.get('dynamicActions', []) if a['status'] == 'not-ported'],
                    caveat='C++ candidates can repeat, be platform-specific, or belong to native widgets. Do not classify them as unimplemented from regex matches alone.')
-    (ROOT/'docs/action-source-audit.json').parent.mkdir(parents=True, exist_ok=True)
-    (ROOT/'docs/action-source-audit.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+    (ROOT/'output/action-source-audit.json').parent.mkdir(parents=True, exist_ok=True)
+    (ROOT/'output/action-source-audit.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
     print(json.dumps(dict(uiDeclarations=len(ui), cppCandidates=len(cpp), missingMainUi=payload['missingMainUi'],
                           confirmedMissing=payload['confirmedMissing']), ensure_ascii=False))
 
