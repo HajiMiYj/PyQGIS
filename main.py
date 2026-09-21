@@ -1,11 +1,15 @@
 """Python counterpart of src/app/main.cpp. Requires OSGeo4W QGIS 3.34.10.
 
-Run it with the OSGeo4W interpreter:  python-qgis-ltr.bat main.py
+Run it with the OSGeo4W interpreter:
+
+    python-qgis-ltr.bat main.py [project] [-n] [-C] [-z INI] [--profile NAME] [-S DIR]
+
+The built-in checks live in check.py and reuse buildSession() from this module.
 """
 import argparse
-import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 import sys
 import traceback
 
@@ -17,7 +21,24 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 
-def resolveProfile(args):
+def parseArguments(argv=None):
+    """Native main.cpp command line: an optional project plus the startup switches."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument('project', nargs='?')
+    parser.add_argument('--profile', default=None, help='配置档案名，或直接的档案目录')
+    parser.add_argument('-S', '--profiles-path', default=None, help='包含 profiles 目录的路径')
+    parser.add_argument('-C', '--nocustomization', action='store_true', help='本次跳过已保存的界面自定义')
+    parser.add_argument('-n', '--nologo', action='store_true', help='本次不显示启动画面')
+    parser.add_argument('-z', '--customizationfile', help='使用指定的界面自定义 INI')
+    args = parser.parse_args(argv)
+    if args.customizationfile:
+        args.customizationfile = str(Path(args.customizationfile).resolve())
+        if not Path(args.customizationfile).is_file():
+            parser.error('界面自定义 INI 不存在')
+    return args
+
+
+def resolveProfile(profile=None, profilesPath=None, checkMode=False):
     """Resolve the startup profile like QgsUserProfileManager + main.cpp.
 
     QgsApplication fixes its profile folder at construction and there is no
@@ -28,18 +49,18 @@ def resolveProfile(args):
     from qgis.core import Qgis, QgsUserProfileManager
     from qgis.PyQt.QtCore import QSettings, QStandardPaths
 
-    if args.profile and Path(args.profile).is_dir():
-        # Explicit folder: launchers and the test harness pass a directory.
-        folder = str(Path(args.profile).resolve())
+    if profile and Path(profile).is_dir():
+        folder = str(Path(profile).resolve())
         root = QgsUserProfileManager.resolveProfilesFolder(str(Path(folder).parent))
         return folder, Path(folder).name, root, False, ''
 
-    if args.check and not args.profile and not args.profiles_path:
+    if checkMode and not profile and not profilesPath:
+        # Checks keep a scratch profile inside the repository.
         folder = str(ROOT / '.runtime/profile')
         root = QgsUserProfileManager.resolveProfilesFolder(str(ROOT / '.runtime'))
         return folder, 'default', root, False, ''
 
-    basePath = args.profiles_path or os.environ.get('QGIS_CUSTOM_CONFIG_PATH', '')
+    basePath = profilesPath or os.environ.get('QGIS_CUSTOM_CONFIG_PATH', '')
     if not basePath:
         basePath = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
     root = QgsUserProfileManager.resolveProfilesFolder(basePath)
@@ -49,7 +70,7 @@ def resolveProfile(args):
     def defaultName():
         return profileSettings.value('/core/defaultProfile', 'default')
 
-    name, ask, missingLastProfile = args.profile or '', False, ''
+    name, ask, missingLastProfile = profile or '', False, ''
     if not name:
         if not names:
             name = defaultName()
@@ -76,50 +97,34 @@ def resolveProfile(args):
     return str(Path(root) / name), name, root, ask, missingLastProfile
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('project', nargs='?')
-    parser.add_argument('--check', action='store_true', help='运行内置检查（默认套件）后退出')
-    parser.add_argument('--labeling-test', action='store_true', help='Run only the label-toolbar integration checks')
-    parser.add_argument('--annotation-test', action='store_true', help='Run annotation and embedded-group integration checks')
-    parser.add_argument('--data-actions-test', action='store_true', help='Run DXF, SpatiaLite and mesh action integration checks')
-    parser.add_argument('--toolbar-test', action='store_true', help='Run dynamic toolbar integration checks')
-    parser.add_argument('--shape-test', action='store_true', help='Run shape digitizing integration checks')
-    parser.add_argument('--remaining-actions-test', action='store_true', help='Run shape completion and mesh editing batch checks')
-    parser.add_argument('--view-actions-test', action='store_true', help='Run report, elevation profile and version parser checks')
-    parser.add_argument('--decoration-test', action='store_true', help='Run decoration actions, rendering and project roundtrip checks')
-    parser.add_argument('--trim-extend-test', action='store_true', help='Run trim/extend snapping, geometry and undo checks')
-    parser.add_argument('--customization-test', action='store_true', help='Run customization draft, INI, capture and startup checks')
-    parser.add_argument('--mesh-edit-test', action='store_true', help='Run mesh triangulation, edge, face preview and keyboard checks')
-    parser.add_argument('--mesh-calculator-test', action='store_true', help='Run mesh calculator UI, time and output checks')
-    parser.add_argument('--dwg-import-test', action='store_true', help='Run CAD import, preview, grouping and cancellation checks')
-    parser.add_argument('--georeferencer-test', action='store_true', help='Run georeferencer actions, GCP IO, raster and vector output checks')
-    parser.add_argument('--statusbar-test', action='store_true', help='Run native status bar layout and interaction checks')
-    parser.add_argument('--partial-actions-test', action='store_true', help='Run focused annotation editing and report grouping checks')
-    parser.add_argument('--layertree-test', action='store_true', help='Run layer-tree context-menu action checks')
-    parser.add_argument('--startup-test', action='store_true', help='Run startup contract checks')
-    parser.add_argument('--profile-test', action='store_true', help='Run user profile management checks')
-    parser.add_argument('--profile', default=None, help='Profile name, or an explicit profile folder')
-    parser.add_argument('-S', '--profiles-path', default=None, help='Path that contains the profiles folder')
-    parser.add_argument('-C', '--nocustomization', action='store_true', help='Skip saved interface customization for this run')
-    parser.add_argument('-n', '--nologo', action='store_true', help='Hide the splash screen for this run')
-    parser.add_argument('-z', '--customizationfile', help='Use a QGIS customization INI file')
-    args = parser.parse_args()
-    if args.customizationfile:
-        args.customizationfile = str(Path(args.customizationfile).resolve())
-        if not Path(args.customizationfile).is_file(): parser.error('Customization INI file does not exist')
-    if args.customization_test or args.mesh_edit_test or args.mesh_calculator_test or args.dwg_import_test or args.georeferencer_test or args.statusbar_test or args.layertree_test or args.startup_test or args.profile_test: args.check = True
-    args.check = args.check or args.labeling_test or args.annotation_test or args.data_actions_test or args.toolbar_test or args.shape_test or args.remaining_actions_test or args.view_actions_test or args.decoration_test or args.partial_actions_test or args.trim_extend_test
-    from qgis.PyQt.QtCore import Qt, QTranslator, QTimer, QSettings, QLocale
+def installExceptionHook(window):
+    """Surface unhandled exceptions in the message bar and the log panel."""
 
-    if args.check:
-        # Checks keep their own QSettings tree so they never touch the user's profile.
+    def exceptionHook(kind, value, tb):
+        detail = ''.join(traceback.format_exception(kind, value, tb))
+        sys.__stderr__.write(detail)
+        window.mMessageBar.pushCritical('Python', str(value))
+        from qgis.core import QgsApplication, Qgis
+        QgsApplication.messageLog().logMessage(detail, 'Python', Qgis.Critical)
+        window.runtimeErrors.append(detail)
+
+    sys.excepthook = exceptionHook
+
+
+def buildSession(argv=None, checkMode=False):
+    """Create QgsApplication and the main window following native main.cpp order.
+
+    Returns (app, window, context). check.py calls this with checkMode=True to run
+    its checks against a real window and event loop.
+    """
+    args = parseArguments([] if checkMode else argv)
+    from qgis.PyQt.QtCore import Qt, QTimer, QSettings, QLocale
+
+    if checkMode:
         QSettings.setDefaultFormat(QSettings.IniFormat)
         QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(ROOT / '.runtime/check-settings'))
     from qgis.core import QgsApplication, Qgis, QgsSettings, QgsProject
     from qgis.gui import QgsGui
-    # if Qgis.QGIS_VERSION_INT != 33410:
-    #     raise RuntimeError(f'Requires QGIS 3.34.10, found {Qgis.QGIS_VERSION}')
     prefix = os.environ.get('QGIS_PREFIX_PATH', 'C:/OSGeo4W/apps/qgis-ltr')
     sys.path.insert(0, str(Path(prefix) / 'python/plugins'))
     # Organization/application names must be set before the profile root is
@@ -137,7 +142,8 @@ def main():
         QCoreApplication.setApplicationName('QGIS-Python-3.34')
     # Profile selection happens before QgsApplication exists (native main.cpp
     # resolves it after construction, which Python cannot do).
-    profileFolder, profileName, rootProfileFolder, askProfile, missingLastProfile = resolveProfile(args)
+    profileFolder, profileName, rootProfileFolder, askProfile, missingLastProfile = resolveProfile(
+        profile=args.profile, profilesPath=args.profiles_path, checkMode=checkMode)
     Path(profileFolder).mkdir(parents=True, exist_ok=True)
     # Native main.cpp application attributes.
     QgsApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
@@ -151,14 +157,14 @@ def main():
     app = QgsApplication([], True, profileFolder)
     # Register application resources before constructing Designer or native widgets.
     from images import images_rc
-    from qgis.PyQt.QtGui import QPixmap, QColor, QGuiApplication
+    from qgis.PyQt.QtGui import QPixmap, QGuiApplication
     from qgis.PyQt.QtWidgets import QSplashScreen
     # Splash screen. Upstream 3.34.10 has this block commented out, but Options
     # still exposes qgis/hideSplash and main.cpp still documents --nologo, so the
-    # desktop port keeps it and honors both switches. Sizing, mask and the
+    # desktop port keeps it and honours both switches. Sizing, mask and the
     # staged messages follow the native QSplashScreen setup.
     splash = None
-    if not args.check and not args.nologo and not QgsSettings().value('qgis/hideSplash', False, type=bool):
+    if not checkMode and not args.nologo and not QgsSettings().value('qgis/hideSplash', False, type=bool):
         splashPixmap = QPixmap(str(ROOT / 'images/splash/splash.png'))
         if not splashPixmap.isNull():
             screen = QGuiApplication.primaryScreen()
@@ -188,16 +194,16 @@ def main():
         from src.app.options.qgsuserprofileselectiondialog import QgsUserProfileSelectionDialog
         chooser = QgsUserProfileSelectionDialog(QgsUserProfileManager(rootProfileFolder))
         if chooser.exec_() != QDialog.Accepted:
-            return 0
+            return app, None, SimpleNamespace(splash=splash, missingLastProfile='', exited=True)
         chosen = chooser.selectedProfileName()
         if chosen and chosen != profileName:
             cleaned, skip = [], False
-            for value in list(sys.argv[1:]):
+            for value in list(argv if argv is not None else sys.argv[1:]):
                 if skip: skip = False; continue
                 if value == '--profile': skip = True; continue
                 cleaned.append(value)
             QProcess.startDetached(sys.executable, [sys.argv[0]] + cleaned + ['--profile', chosen])
-            return 0
+            return app, None, SimpleNamespace(splash=splash, missingLastProfile='', exited=True)
     # Native main.cpp style selection: qgis/style, fusion for non-default UI
     # themes, and the known-broken adwaita styles rejected outright.
     from qgis.PyQt.QtWidgets import QApplication as _QApp, QStyleFactory
@@ -251,20 +257,11 @@ def main():
     from src.app.qgisapp import QgisApp
     window = QgisApp(customization=not args.nocustomization, customizationFile=args.customizationfile,
                      rootProfileFolder=rootProfileFolder, profileName=profileName,
-                     splash=splash, skipVersionCheck=args.check)
+                     splash=splash, skipVersionCheck=checkMode)
     # Qt replaces the top level style with a QStyleSheetStyle once the theme
     # stylesheet is set, so keep the installed proxy for introspection.
     window.mAppStyle = appStyle
-
-    def exceptionHook(kind, value, tb):
-        """Surface unhandled exceptions in the message bar and the log panel."""
-        detail = ''.join(traceback.format_exception(kind, value, tb))
-        sys.__stderr__.write(detail)
-        window.mMessageBar.pushCritical('Python', str(value))
-        QgsApplication.messageLog().logMessage(detail, 'Python', Qgis.Critical)
-        window.runtimeErrors.append(detail)
-
-    sys.excepthook = exceptionHook
+    installExceptionHook(window)
     window.show()
     if args.project:
         window.addProject(args.project)
@@ -282,9 +279,9 @@ def main():
     # initializationCompleted, which QgisApp::fileOpenAfterLaunch() answers by
     # honouring qgis/projOpenAtLaunch (welcome page / most recent / specific / new).
     window.completeInitialization()
-    if args.check:
-        # The checks drive the map canvas, while qgis/projOpenAtLaunch == 0 makes
-        # the welcome page the startup view, so bring the canvas forward.
+    if checkMode:
+        # Checks drive the map canvas, while qgis/projOpenAtLaunch == 0 makes the
+        # welcome page the startup view, so bring the canvas forward.
         window.showMapCanvas()
     QgsProject.instance().setDirty(False)
     # Native main.cpp warns when the "last used profile" policy fell back.
@@ -292,88 +289,43 @@ def main():
         window.mMessageBar.pushWarning(
             '未找到配置档案',
             f"上次使用的配置档案 '{missingLastProfile}' 未找到，已改用默认配置档案。")
-    if args.check:
-        def runChecks():
-            if args.statusbar_test:
-                from tests.src.python.test_qgisapp_statusbar import run
-            elif args.layertree_test:
-                from tests.src.python.test_qgisapp_layertree import run
-            elif args.startup_test:
-                from tests.src.python.test_qgisapp_startup import run
-            elif args.profile_test:
-                from tests.src.python.test_qgisapp_profile import run
-            elif args.georeferencer_test:
-                from tests.src.python.test_qgisapp_georeferencer import run
-            elif args.dwg_import_test:
-                from tests.src.python.test_qgisapp_dwgimport import run
-            elif args.mesh_edit_test:
-                from tests.src.python.test_qgisapp_meshediting import run
-            elif args.mesh_calculator_test:
-                from tests.src.python.test_qgisapp_meshcalculator import run
-            elif args.customization_test:
-                from tests.src.python.test_qgscustomization import run
-            elif args.trim_extend_test:
-                from tests.src.python.test_qgisapp_trimextendfeature import run
-            elif args.partial_actions_test:
-                from tests.src.python.test_qgisapp_partialactions import run
-            elif args.decoration_test:
-                from tests.src.python.test_qgisapp_decorations import run
-            elif args.view_actions_test:
-                from tests.src.python.test_qgisapp_viewactions import run
-            elif args.remaining_actions_test:
-                from tests.src.python.test_qgisapp_remainingactions import run
-            elif args.shape_test:
-                from tests.src.python.test_qgisapp_shapes import run
-            elif args.toolbar_test:
-                from tests.src.python.test_qgisapp_toolbars import run
-            elif args.data_actions_test:
-                from tests.src.python.test_qgisapp_dataactions import run
-            elif args.annotation_test:
-                from tests.src.python.test_qgisapp_annotations import run
-            elif args.labeling_test:
-                from tests.src.python.test_qgisapp_labeling import runReport as run
-            else:
-                from tests.src.python.test_qgisapp import run
-            try:
-                report = run(window)
-                report['runtimeErrors'] = window.runtimeErrors
-                if window.runtimeErrors:
-                    raise AssertionError(window.runtimeErrors)
-                out = ROOT / 'output'
-                out.mkdir(exist_ok=True)
-                reportName = 'remaining-actions-test.json' if args.remaining_actions_test else 'shape-test.json' if args.shape_test else 'toolbar-test.json' if args.toolbar_test else 'data-actions-test.json' if args.data_actions_test else 'annotation-test.json' if args.annotation_test else 'labeling-test.json' if args.labeling_test else 'check.json'
-                if args.view_actions_test: reportName = 'view-actions-test.json'
-                if args.decoration_test: reportName = 'decoration-test.json'
-                if args.trim_extend_test: reportName = 'trim-extend-test.json'
-                if args.customization_test: reportName = 'customization-test.json'
-                if args.mesh_edit_test: reportName = 'mesh-edit-test.json'
-                if args.mesh_calculator_test: reportName = 'mesh-calculator-test.json'
-                if args.dwg_import_test: reportName = 'dwg-import-test.json'
-                if args.georeferencer_test: reportName = 'georeferencer-test.json'
-                if args.statusbar_test: reportName = 'statusbar-test.json'
-                if args.layertree_test: reportName = 'layertree-test.json'
-                if args.startup_test: reportName = 'startup-test.json'
-                if args.profile_test: reportName = 'profile-test.json'
-                if args.partial_actions_test: reportName = 'partial-actions-test.json'
-                (out / reportName).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
-                window.grab().save(str(out / 'qgis-python.png'))
-                window.prepareToQuit()
-                app.exit(0)
-            except Exception:
-                traceback.print_exc(file=sys.__stderr__)
-                app.exit(1)
-        QTimer.singleShot(1200, runChecks)
-    result = app.exec_()
+    context = SimpleNamespace(splash=splash, missingLastProfile=missingLastProfile,
+                              profileName=profileName, profileFolder=profileFolder,
+                              rootProfileFolder=rootProfileFolder, args=args, exited=False)
+    return app, window, context
+
+
+def finishSession(app, window):
+    """Native shutdown sequence: release the window before QGIS unloads providers."""
+    from qgis.core import QgsProject
     sys.excepthook = sys.__excepthook__
     sys.stdout, sys.stderr = sys.__stdout__, sys.__stderr__
     window.shutdown()
-    # Release Python-owned GUI objects before destroying provider registries.
     from qgis.PyQt import sip
     QgsProject.instance().clear()
     app.processEvents()
     sip.delete(window)
     app.exitQgis()
+
+
+def runApplication(argv=None, checkMode=False, onReady=None):
+    """Build the session, run the event loop, then shut down. Returns the exit code.
+
+    onReady(app, window, context) runs once the window is on screen and before the
+    event loop starts; check.py uses it to schedule the selected check.
+    """
+    app, window, context = buildSession(argv, checkMode=checkMode)
+    if context.exited:
+        return 0
+    if onReady is not None:
+        onReady(app, window, context)
+    result = app.exec_()
+    finishSession(app, window)
     return result
+
+
+def main(argv=None):
+    return runApplication(argv)
 
 
 if __name__ == '__main__':

@@ -95,8 +95,14 @@ python main.py -C                      # 本次跳过界面自定义（入口被
 python main.py -z "C:\path\customization.ini"   # 指定外部自定义 INI
 python main.py --profile 名称           # 指定配置档案（也可直接传档案目录）
 python main.py -S "D:\profiles"        # 指定 profiles 根目录
-python main.py --check                 # 运行内置检查（默认套件），见 §7
 python main.py --help                  # 全部参数
+```
+
+检查是开发工具，放在独立的 `check.py` 里（它复用 `main.py` 的启动流程构造真实窗口），用法见 [§7](#7-内置检查)：
+
+```powershell
+python check.py --check                # 默认套件
+python check.py --startup-test         # 单项
 ```
 
 ### 2.3 环境变量
@@ -136,7 +142,8 @@ python main.py --help                  # 全部参数
 
 ```
 qgis_python/
-├─ main.py                      入口，对应原生 src/app/main.cpp（启动时序见 §6.1）
+├─ main.py                      应用入口，对应原生 src/app/main.cpp（启动时序见 §6.1）
+├─ check.py                     检查运行器（开发工具，见 §7）
 ├─ LICENSE                      GPL-3.0（与上游 QGIS 一致）
 ├─ 功能移植清单.md              程序启动时自动重写的 action 状态台账（已入库）
 ├─ src/
@@ -256,7 +263,7 @@ def comboSetting(self, name, key, options, default):
 desiredStyle = settings.value('qgis/style', '', type=str)
 ```
 
-**改一个选项的完整动作**：确认控件已 `self.enable(...)`、在绑定表里登记、`saveOptions()` 能写回、启动路径能读到；然后跑 `python main.py --check` 与 `python main.py --startup-test`。
+**改一个选项的完整动作**：确认控件已 `self.enable(...)`、在绑定表里登记、`saveOptions()` 能写回、启动路径能读到；然后跑 `python check.py --check` 与 `python check.py --startup-test`。
 
 ### 4.4 实例三：新增一个 action（完整闭环）
 
@@ -282,7 +289,7 @@ self.mDynamicActions['qgisapp:actionDocumentation'] = dict(
 
 **验证顺序**：
 1. 启动程序，点击该菜单项，确认行为；
-2. `python main.py --check`（默认套件）与相关子系统检查；
+2. `python check.py --check`（默认套件）与相关子系统检查；
 3. 打开 `功能移植清单.md`，确认该 action 的状态从"未实现"变为"已接入"（若是上游清单内的 action）；
 4. 提交时写清"做了什么 + 对应原生位置"。
 
@@ -473,17 +480,25 @@ Initializing file filters → Restoring window state → Populate saved styles �
 
 ### 7.1 设计
 
-检查不是 pytest 用例，而是**挂在应用启动流程里的函数**：每个模块暴露 `run(app)`（部分为 `runReport(app)`），由 `main.py` 在窗口构造完成后调用。每条断言都在真实主窗口、真实画布、真实 `QgsSettings` 下执行，因此能覆盖"只有经 `main.py` 才会出现"的问题（选项窗口打不开、启动消息缺段、控制台不恢复等）。
+检查不是 pytest 用例，而是**挂在应用启动流程里的函数**：每个模块暴露 `run(app)`（部分为 `runReport(app)`），由 `check.py` 在窗口构造完成后调用。每条断言都在真实主窗口、真实画布、真实 `QgsSettings` 下执行，因此能覆盖"只有经真实启动流程才会出现"的问题（选项窗口打不开、启动消息缺段、控制台不恢复等）。
+
+分工：
+
+| 文件 | 职责 |
+| --- | --- |
+| `main.py` | 应用入口，只做启动：参数、档案、样式/主题/翻译、构造窗口、事件循环、退出 |
+| `check.py` | 检查运行器：检查标志、分派到 `tests/src/python/`、写报告与截图、决定退出码 |
+| `main.py::buildSession/runApplication` | 两者共用的启动流程，检查因此跑在真实窗口上而不是模拟环境 |
 
 ### 7.2 运行
 
-**一项检查 = 一次进程调用**：`main.py` 内部是 `elif` 链，同一次调用只执行第一个命中的标志。
+**一项检查 = 一次进程调用**：`check.py` 一次只执行第一个命中的标志。
 
 ```powershell
 $env:QT_QPA_PLATFORM='offscreen'
-& 'C:\OSGeo4W\bin\python-qgis-ltr.bat' main.py --check          # 默认套件（聚合 widgets/actions 检查）
-& 'C:\OSGeo4W\bin\python-qgis-ltr.bat' main.py --startup-test   # 启动契约
-& 'C:\OSGeo4W\bin\python-qgis-ltr.bat' main.py --georeferencer-test
+& 'C:\OSGeo4W\bin\python-qgis-ltr.bat' check.py --check          # 默认套件（聚合 widgets/actions 检查）
+& 'C:\OSGeo4W\bin\python-qgis-ltr.bat' check.py --startup-test   # 启动契约
+& 'C:\OSGeo4W\bin\python-qgis-ltr.bat' check.py --georeferencer-test
 ```
 
 全量回归（20 项，交付前的验证矩阵）：
@@ -498,7 +513,7 @@ $flags = @('--check','--startup-test','--profile-test','--layertree-test','--dat
            '--view-actions-test','--decoration-test','--toolbar-test')
 $fail = @()
 foreach ($f in $flags) {
-  & $python main.py $f *> $null
+  & $python check.py $f *> $null
   if ($LASTEXITCODE -ne 0) { $fail += $f; "FAILED: $f" }
 }
 "ran $($flags.Count) checks; failures: $($fail.Count)"
@@ -507,7 +522,7 @@ foreach ($f in $flags) {
 ### 7.3 结果与判定
 
 - 报告写到 `output/<name>.json`：`check.json`（默认套件）、`startup-test.json`、`georeferencer-test.json`…；同目录还会保存一张窗口截图 `qgis-python.png`。
-- 报告含 `checks`（人可读检查项）与 `runtimeErrors`：`main.py` 用 `sys.excepthook` 把未处理异常同时送入消息栏、日志面板和 `window.runtimeErrors`；后者非空即判该检查失败。
+- 报告含 `checks`（人可读检查项）与 `runtimeErrors`：`main.py` 安装的 `sys.excepthook` 把未处理异常同时送入消息栏、日志面板和 `window.runtimeErrors`；后者非空即判该检查失败。
 - 失败时退出码非 0，并在 stderr 给出断言位置。
 
 ### 7.4 隔离与环境
@@ -521,15 +536,14 @@ foreach ($f in $flags) {
 ### 7.5 新增一项检查
 
 1. 在 `tests/src/python/` 新建 `test_qgisapp_xxx.py`，实现 `def run(app)` 并 `return dict(checks=[...])`（或 `runReport`）。
-2. 在 `main.py` 参数表加 `--xxx-test`，并在 `elif` 链中加 `from tests.src.python.test_qgisapp_xxx import run`。
-3. 在 `reportName` 逻辑里补上该检查的 JSON 文件名（否则会落到默认名）。
-4. 单独跑一次，再把它加进全量回归列表。
+2. 在 `check.py` 的 `CHECKS` 表加一行：`('--xxx-test', 'test_qgisapp_xxx', 'run')`。报告文件名由标志自动推导（`--xxx-test` → `output/xxx-test.json`），标志也会自动出现在 `check.py --help` 里。
+3. 单独跑一次：`python check.py --xxx-test`；再把它加进全量回归列表。
 
 ### 7.6 注意：`tests/` 与 `docs/` 未入库
 
 `.gitignore` 排除了 `tests/`、`docs/`、`output/`、`.runtime/`、`images/images_rc.py`、`src/ui/ui_*.py`。也就是：
 
-- 克隆仓库后没有检查套件与审计数据，需要自行保留/生成（按 §7.5 的约定编写即可被 `main.py` 调度）；
+- 克隆仓库后没有检查套件与审计数据，需要自行保留/生成（按 §7.5 的约定编写即可被 `check.py` 调度）；
 - `docs/*.json` 由 [§8](#8-状态文档与脚本) 的脚本生成，`功能移植清单.md` 由程序启动时生成，两者都不要手工编辑。
 
 ---
@@ -687,7 +701,7 @@ offscreen 平台没有字体目录，属正常噪声；不要基于离屏字体�
 | 改启动流程 | `main.py` + [§6.1](#61-启动时序mainpy-与原生-maincppqgisappcpp) |
 | 改欢迎页/最近工程 | [§6.4](#64-最近工程欢迎页模板自绘列表) |
 | 改一条翻译 | [§4.5](#45-实例四一条界面文字是怎么被翻译的) + [§6.6](#66-本地化) |
-| 加一项检查 | [§7.5](#75-新增一项检查) |
+| 加一项检查 | [§7.5](#75-新增一项检查)（`check.py` 的 `CHECKS` 表加一行即可） |
 | 看当前完成度 | `功能移植清单.md`、`docs/implementation-status.json` |
 | 排查会抛异常的选项页 | `scripts/exercise_options.py`、`window.runtimeErrors` |
 
