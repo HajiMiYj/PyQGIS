@@ -59,6 +59,10 @@ class QgsWelcomePage(QWidget):
         leftLayout.addWidget(self.mRecentProjectsTitle, 0)
 
         self.mRecentProjectsListView = QListView()
+        # The upstream card delegate reserves 450 pixels in sizeHint(), including
+        # a 250-pixel preview. Keep enough room for its title, path and CRS when
+        # this application has several dock panels open beside the welcome page.
+        self.mRecentProjectsListView.setMinimumWidth(450)
         self.mRecentProjectsListView.setResizeMode(QListView.Adjust)
         self.mRecentProjectsListView.setContextMenuPolicy(Qt.CustomContextMenu)
         self.mRecentProjectsListView.customContextMenuRequested.connect(self.showContextMenuForProjects)

@@ -139,6 +139,8 @@ class QgisApp(QMainWindow):
         self.showSplashMessage('Reading settings')
         # self.setWindowIcon(QgsApplication.getThemeIcon('/qgis-icon.svg'))
         self.mProject = QgsProject.instance()
+        self.mProjectHasMapCanvas = False
+        self.mProject.readProject.connect(self.projectMapCanvasRead)
         self.mProject.setCrs(
             QgsCoordinateReferenceSystem(self.mSettings.value('projections/defaultProjectCrs', 'EPSG:4326')))
         self.mProject.setEllipsoid('WGS84')
@@ -279,6 +281,7 @@ class QgisApp(QMainWindow):
         self.mMessageBar = QgsMessageBar(container)
         layout.addWidget(self.mMessageBar)
         self.mMapCanvas = QgsMapCanvas(container)
+        self.mMapCanvas.setObjectName('theMapCanvas')
         from qgis.gui import QgsUserInputWidget, QgsFloatingWidget
         self.mUserInputDockWidget = QgsUserInputWidget(self.mMapCanvas)
         self.mUserInputDockWidget.setObjectName('UserInputDockWidget')
@@ -591,27 +594,10 @@ class QgisApp(QMainWindow):
         self.mTemporalControllerDock = self.dock('TemporalController', '时间控制器', self.mTemporalControllerWidget,
                                                  Qt.BottomDockWidgetArea)
         self.mMapCanvas.setTemporalController(self.mTemporalControllerWidget.temporalController())
-        self.mIdentifyResults = QTreeWidget(self)
-        self.mIdentifyResults.setHeaderLabels(['属性', '值'])
-        identifyContainer = QWidget()
-        identifyLayout = QVBoxLayout(identifyContainer)
-        identifyLayout.setContentsMargins(0, 0, 0, 0)
-        self.mIdentifyResultsToolBar = QToolBar()
-        self.mIdentifyResultsToolBar.addAction(QgsApplication.getThemeIcon('/mActionExpandTree.svg'), '展开全部',
-                                               self.mIdentifyResults.expandAll)
-        self.mIdentifyResultsToolBar.addAction(QgsApplication.getThemeIcon('/mActionCollapseTree.svg'), '折叠全部',
-                                               self.mIdentifyResults.collapseAll)
-        self.mIdentifyResultsToolBar.addAction(QgsApplication.getThemeIcon('/mActionDeleteSelected.svg'), QCoreApplication.translate('QgsAuthConfigEdit', 'Clear'),
-                                               self.mIdentifyResults.clear)
-        self.mIdentifyResultsToolBar.addAction(QgsApplication.getThemeIcon('/mActionEditCopy.svg'), '复制选中值',
-                                               self.copyIdentifyValue)
-        self.mIdentifyResultsToolBar.addAction(QgsApplication.getThemeIcon('/mActionZoomToSelected.svg'), '缩放到结果',
-                                               self.zoomToIdentifyResult)
-        self.mIdentifyResultsToolBar.addAction(QgsApplication.getThemeIcon('/mActionFormView.svg'), '打开要素表单',
-                                               self.openIdentifyForm)
-        identifyLayout.addWidget(self.mIdentifyResultsToolBar)
-        identifyLayout.addWidget(self.mIdentifyResults)
-        self.mIdentifyResultsDock = self.dock('IdentifyResults', QCoreApplication.translate('QgsIdentifyResultsBase', 'Identify Results'), identifyContainer)
+        from .qgsidentifyresultsdialog import QgsIdentifyResultsDialog
+        self.mIdentifyResultsDialog = QgsIdentifyResultsDialog(self.mMapCanvas, self)
+        self.mIdentifyResults = self.mIdentifyResultsDialog.lstResults
+        self.mIdentifyResultsDock = self.mIdentifyResultsDialog.mDock
         self.mLayerOrderWidget = QgsCustomLayerOrderWidget(self.mLayerTreeCanvasBridge, self)
         self.mLayerOrderDock = self.dock('LayerOrder', QCoreApplication.translate('QgisApp', 'Layer Order'), self.mLayerOrderWidget)
         self.mOverviewCanvas = QgsMapOverviewCanvas(self, self.mMapCanvas)
@@ -1384,6 +1370,7 @@ class QgisApp(QMainWindow):
             QTimer.singleShot(0, self.zoomToLayerExtent)
 
     def layersWillBeRemoved(self, ids):
+        self.mIdentifyResultsDialog.clear()
         if self.mMeshEditTool.mCurrentLayer and self.mMeshEditTool.mCurrentLayer.id() in ids:
             if self.mMapCanvas.mapTool() is self.mMeshEditTool: self.mMapCanvas.setMapTool(self.mMapTools['pan'])
             self.mMeshEditTool.mCurrentLayer = None
@@ -1915,6 +1902,10 @@ class QgisApp(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, QCoreApplication.translate('QgisApp', 'Open Project'), '', 'QGIS 工程 (*.qgz *.qgs)')
         if path: return self.addProject(path)
 
+    def openProject(self, path):
+        """Open a recent project using the same path as the File/Open action."""
+        return self.addProject(path)
+
     def addProject(self, path):
         if not self.saveDirty(): return False
         # Validate in a temporary project before replacing the current one.
@@ -1924,7 +1915,14 @@ class QgisApp(QMainWindow):
             return False
         candidate.clear()
         del candidate
-        if not self.mProject.read(path):
+        autoSetup = self.mLayerTreeCanvasBridge.autoSetupOnFirstLayer()
+        self.mLayerTreeCanvasBridge.setAutoSetupOnFirstLayer(False)
+        self.mProjectHasMapCanvas = False
+        try:
+            opened = self.mProject.read(path)
+        finally:
+            self.mLayerTreeCanvasBridge.setAutoSetupOnFirstLayer(autoSetup)
+        if not opened:
             self.mMessageBar.pushCritical('打开失败', self.mProject.error())
             return False
         gps = [l.id() for l in self.mProject.mapLayers().values() if
@@ -1932,18 +1930,40 @@ class QgisApp(QMainWindow):
         if gps:
             self.mProject.removeMapLayers(gps)
             self.mMessageBar.pushWarning('GPS 已排除', f'工程中移除了 {len(gps)} 个 GPX 图层；源文件未改写')
+        invalidLayers = [layer.name() for layer in self.mProject.mapLayers().values() if not layer.isValid()]
+        if invalidLayers:
+            names = '、'.join(invalidLayers[:3])
+            if len(invalidLayers) > 3:
+                names += f' 等 {len(invalidLayers)} 个图层'
+            self.mMessageBar.pushWarning('图层数据源无效', f'{names}。请检查源文件路径或数据连接。')
         self.mMapCanvas.setDestinationCrs(self.mProject.crs())
-        extent = self.mProject.viewSettings().defaultViewExtent()
-        if not extent.isEmpty():
-            transform = QgsCoordinateTransform(extent.crs(), self.mMapCanvas.mapSettings().destinationCrs(),
-                                               self.mProject)
-            self.mMapCanvas.setExtent(transform.transformBoundingBox(extent))
+        self.mMapCanvas.setCanvasColor(self.mProject.backgroundColor())
+        self.mMapCanvas.setSelectionColor(self.mProject.selectionColor())
+        self.mLayerTreeCanvasBridge.setCanvasLayers()
+        if not self.mProjectHasMapCanvas:
+            extent = self.mProject.viewSettings().defaultViewExtent()
+            if not extent.isEmpty():
+                transform = QgsCoordinateTransform(extent.crs(), self.mMapCanvas.mapSettings().destinationCrs(),
+                                                   self.mProject)
+                self.mMapCanvas.setExtent(transform.transformBoundingBox(extent))
+            elif self.mMapCanvas.layers():
+                self.mMapCanvas.zoomToFullExtent()
+        nodes = self.mProject.layerTreeRoot().findLayers()
+        if nodes and nodes[0].layer():
+            self.setActiveLayer(nodes[0].layer())
         self.mMapCanvas.refresh()
         self.showMapCanvas()
         # Native fileOpen() emits projectRead before recording the recent entry.
         self.projectRead.emit()
         self.saveRecentProjectPath(False)
+        recent = next((item for item in self.mRecentProjects if item.path == self.mProject.absoluteFilePath()), None)
+        if self.mMapCanvas.layers() and recent is not None and (
+                not recent.previewImagePath or not Path(recent.previewImagePath).is_file()):
+            self.saveRecentProjectPath(True)
         return True
+
+    def projectMapCanvasRead(self, document):
+        self.mProjectHasMapCanvas = document.elementsByTagName('mapcanvas').count() > 0
 
     def fileRevert(self):
         path = self.mProject.fileName()
@@ -2121,22 +2141,24 @@ class QgisApp(QMainWindow):
             settings.endGroup()
 
     def createPreviewImage(self, path, icon=None):
-        """QgisApp::createPreviewImage(): 250x177 canvas render used by the welcome page."""
+        """Render the current canvas view for a recent-project card."""
+        from qgis.core import QgsMapRendererSequentialJob, QgsMapSettings
         devicePixelRatio = self.mMapCanvas.mapSettings().devicePixelRatio()
         previewSize = QSize(250, 177)
-        previewRect = QRect(QPoint(int((self.mMapCanvas.width() - previewSize.width()) / 2),
-                                   int((self.mMapCanvas.height() - previewSize.height()) / 2)),
-                            previewSize)
-        previewImage = QPixmap(previewSize * devicePixelRatio)
+        mapSettings = QgsMapSettings(self.mMapCanvas.mapSettings())
+        mapSettings.setOutputSize(previewSize * devicePixelRatio)
+        job = QgsMapRendererSequentialJob(mapSettings)
+        job.start()
+        job.waitForFinished()
+        previewImage = QPixmap.fromImage(job.renderedImage())
+        if previewImage.isNull():
+            return False
         previewImage.setDevicePixelRatio(devicePixelRatio)
-        previewImage.fill()
         previewPainter = QPainter(previewImage)
-        # PyQGIS takes a QRectF target (the C++ overload accepts QRect).
-        self.mMapCanvas.render(previewPainter, QRectF(QRect(QPoint(), previewSize)), previewRect)
         if icon is not None and not icon.isNull():
             previewPainter.drawPixmap(QPointF(250 - 24 - 5, 177 - 24 - 5), icon.pixmap(QSize(24, 24)))
         previewPainter.end()
-        previewImage.save(path)
+        return previewImage.save(path)
 
     def saveRecentProjectPath(self, savePreviewImage, iconOverlay=None):
         """QgisApp::saveRecentProjectPath(): record the current project, pinned first."""
@@ -2338,13 +2360,18 @@ class QgisApp(QMainWindow):
 
     def zoomToLayerExtent(self):
         layers = self.mLayerTreeView.selectedLayers() or ([self.activeLayer()] if self.activeLayer() else [])
-        extent = QgsRectangle()
-        extent.setMinimal()
+        extent = None
         for layer in layers:
             transform = QgsCoordinateTransform(layer.crs(), self.mMapCanvas.mapSettings().destinationCrs(),
                                                self.mProject)
-            extent.combineExtentWith(transform.transformBoundingBox(layer.extent()))
-        if not extent.isNull() and extent.isFinite():
+            layerExtent = transform.transformBoundingBox(layer.extent())
+            if not layerExtent.isFinite():
+                continue
+            if extent is None:
+                extent = layerExtent
+            else:
+                extent.combineExtentWith(layerExtent)
+        if extent is not None and not extent.isNull():
             if extent.width() == 0 or extent.height() == 0: extent.grow(0.001)
             extent.scale(1.05)
             self.mMapCanvas.setExtent(extent)
@@ -3456,40 +3483,13 @@ class QgisApp(QMainWindow):
             self.showPythonDialog()
 
     def copyIdentifyValue(self):
-        QgsApplication.clipboard().setText(
-            '\n'.join(item.text(0) + '\t' + item.text(1) for item in self.mIdentifyResults.selectedItems()))
+        QgsApplication.clipboard().setText('	'.join(item.text(0) + '	' + item.text(1) for item in self.mIdentifyResults.selectedItems()))
 
     def zoomToIdentifyResult(self):
-        item = self.mIdentifyResults.currentItem()
-        if not item:
-            return
-        while item.parent():
-            item = item.parent()
-        index = self.mIdentifyResults.indexOfTopLevelItem(item)
-        results = self.mMapTools['identify'].mResults
-        if not 0 <= index < len(results):
-            return
-        result = results[index]
-        if not result.mFeature.isValid() or result.mFeature.geometry().isEmpty():
-            return
-        layer = result.mLayer
-        transform = QgsCoordinateTransform(layer.crs(), self.mMapCanvas.mapSettings().destinationCrs(), self.mProject)
-        extent = transform.transformBoundingBox(result.mFeature.geometry().boundingBox())
-        if extent.width() == 0 or extent.height() == 0:
-            extent.grow(self.mMapCanvas.mapUnitsPerPixel() * 20)
-        self.mMapCanvas.setExtent(extent)
-        self.mMapCanvas.refresh()
+        return self.mIdentifyResultsDialog.zoomToFeature()
 
     def openIdentifyForm(self):
-        item = self.mIdentifyResults.currentItem()
-        if not item: return
-        while item.parent(): item = item.parent()
-        index = self.mIdentifyResults.indexOfTopLevelItem(item)
-        results = self.mMapTools['identify'].mResults
-        if 0 <= index < len(results):
-            result = results[index]
-            if isinstance(result.mLayer, QgsVectorLayer) and result.mFeature.isValid():
-                self.mQgisInterface.openFeatureForm(result.mLayer, result.mFeature)
+        return self.mIdentifyResultsDialog.featureForm()
 
     def showStyleManager(self):
         QgsStyleManagerDialog(QgsStyle.defaultStyle(), self).exec_()
@@ -3705,6 +3705,7 @@ class QgisApp(QMainWindow):
                 self.mProject.removeMapLayer(layer.id())
 
     def shutdown(self):
+        self.mIdentifyResultsDialog.saveSettings()
         if self.mShutdown: return
         self.mUndoWidget.setStack(None)
         self.mMapCanvas.stopRendering()
